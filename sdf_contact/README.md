@@ -11,7 +11,7 @@ This repo is intentionally organized around one main goal:
 - A **single main contact path** based on a high-accuracy local evaluator:
   contour extraction -> polygon footprint -> triangulation -> quadrature -> dual root solves -> traction accumulation.
 - A **baseline evaluator** for comparison and regression tests.
-- A **small optional implicit solver** so the evaluator can still be embedded into dynamics.
+- A **midpoint default implicit solver with adaptive substepping** so the evaluator can still be embedded into dynamics.
 - A **benchmark module** so accuracy is defined by reproducible cases instead of intuition.
 
 ## What was removed
@@ -52,8 +52,9 @@ sdf_contact_minimal_repo/
 1. Use `PolygonHighAccuracyLocalEvaluator` for all new experiments.
 2. Use `BaselineGridLocalEvaluator` only for comparison.
 3. Validate on static / quasi-static benchmark families first.
-4. Only then decide whether the global implicit solver is worth refactoring.
-5. Run the admission gates in `docs/BENCHMARK_ACCEPTANCE.md` to decide whether an evaluator is merely research-usable or genuinely production-ready.
+4. The default solver is now the tuned midpoint solver; see `docs/DEFAULT_SOLVER.md`.
+5. Only then decide whether the global implicit solver needs further refactoring beyond the default midpoint/adaptive path.
+6. Run the admission gates in `docs/BENCHMARK_ACCEPTANCE.md` to decide whether an evaluator is merely research-usable or genuinely production-ready.
 
 ## Quick start
 

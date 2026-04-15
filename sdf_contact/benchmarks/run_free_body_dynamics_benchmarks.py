@@ -36,7 +36,7 @@ from sdf_contact import (
 OUT = ROOT / 'results' / 'free_body_dynamics_benchmarks'
 OUT.mkdir(parents=True, exist_ok=True)
 
-# Shared untuned configuration for all true-dynamics cases.
+# Shared default endpoint configuration for all true-dynamics cases.
 PATCH_CFG = PolygonPatchConfig(raster_cells=4, max_patch_radius=0.50, support_radius_floor_scale=0.90)
 SHEET_CFG = SheetExtractConfig(bisection_steps=8)
 K_EQUAL = 40000.0
@@ -50,7 +50,7 @@ EVALUATOR = FormalEndpointBandSheetEvaluator(
     pressure_cfg=FormalPressureFieldConfig(stiffness_default=K_EQUAL, damping_gamma=0.0),
 )
 CONTACT_MANAGER = ContactManager(EVALUATOR)
-SOLVER_CFG = IntegratorConfig(dt=DT, newton_max_iter=2, newton_tol=1.0e-8, fd_eps=1.0e-4, line_search_factors=(1.0, 0.5))
+SOLVER_CFG = IntegratorConfig(dt=DT, collect_diagnostics=True)
 K_EQ = K_EQUAL * K_EQUAL / (K_EQUAL + K_EQUAL)
 
 
@@ -161,6 +161,7 @@ def _run_until_first_release(world, body_name: str, delta_fn, potential_fn, x_re
 
     for step in range(max_steps):
         infos = solver.step_world(world)
+        step_diag = solver.last_step_diagnostics or {}
         contacts = CONTACT_MANAGER.compute_all_contacts(world)
         body = next(b for b in world.bodies if b.name == body_name)
         agg_body = contacts[body_name]
@@ -200,6 +201,8 @@ def _run_until_first_release(world, body_name: str, delta_fn, potential_fn, x_re
             'num_pair_patch_points': int(agg_body.num_pair_patch_points),
             'num_pair_sheet_points': int(agg_body.num_pair_sheet_points),
             'num_pair_tractions': int(agg_body.num_pair_tractions),
+            'solver_final_residual': float(step_diag.get('final_residual_norm', float('nan'))),
+            'solver_substeps': int(step_diag.get('substeps', 1)) if isinstance(step_diag.get('substeps', 1), (int, float)) else 1,
         })
 
         if first_contact_idx is None and active:
