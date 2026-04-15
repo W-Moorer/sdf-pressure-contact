@@ -1,0 +1,4 @@
+evaluator,tier,research_pass,production_pass
+baseline_default,research,True,False
+polygon_default,research,True,False
+polygon_reference,reference_only,False,False
