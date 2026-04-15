@@ -35,6 +35,48 @@ class SphereGeometry:
         return np.array([0.0, 1.0, 0.0], dtype=float) if n <= 1.0e-15 else d / n
 
 
+
+
+class BoxGeometry:
+    def __init__(self, extents):
+        self.extents = np.asarray(extents, dtype=float)
+        if self.extents.shape != (3,):
+            raise ValueError('extents must be length-3')
+        self.half = 0.5 * self.extents
+
+    def bounding_radius(self) -> float:
+        return float(np.linalg.norm(self.half))
+
+    def phi_world(self, x: float, y: float, z: float, pose: Pose6D) -> float:
+        p_world = np.array([x, y, z], dtype=float)
+        R = quat_to_rotmat(pose.orientation)
+        p_local = R.T @ (p_world - pose.position)
+        q = np.abs(p_local) - self.half
+        outside = np.linalg.norm(np.maximum(q, 0.0))
+        inside = min(max(q[0], max(q[1], q[2])), 0.0)
+        return float(outside + inside)
+
+    def normal_world(self, x: float, y: float, z: float, pose: Pose6D) -> np.ndarray:
+        p_world = np.array([x, y, z], dtype=float)
+        R = quat_to_rotmat(pose.orientation)
+        p_local = R.T @ (p_world - pose.position)
+        q = np.abs(p_local) - self.half
+        if np.any(q > 0.0):
+            clamped = np.clip(p_local, -self.half, self.half)
+            n_local = p_local - clamped
+            nn = np.linalg.norm(n_local)
+            if nn <= 1.0e-15:
+                n_local = np.array([0.0, 1.0, 0.0], dtype=float)
+            else:
+                n_local = n_local / nn
+        else:
+            idx = int(np.argmax(q))
+            n_local = np.zeros(3, dtype=float)
+            n_local[idx] = 1.0 if p_local[idx] >= 0.0 else -1.0
+        n_world = R @ n_local
+        return n_world / max(np.linalg.norm(n_world), 1.0e-15)
+
+
 class PlaneGeometry:
     def __init__(self, normal=(0.0, 1.0, 0.0), offset: float = 0.0):
         n = np.asarray(normal, dtype=float)

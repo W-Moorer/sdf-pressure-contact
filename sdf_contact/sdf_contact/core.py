@@ -247,11 +247,57 @@ class PairSheetPoint:
     projected_weight: float
     surface_weight: float
     source_index: int = -1
+    closure: float = 0.0
+    equilibrium_pressure: float = 0.0
+    column_normal: np.ndarray | None = None
 
 
 @dataclass
 class PairSheet:
     samples: list[PairSheetPoint]
+    metadata: dict = field(default_factory=dict)
+
+
+
+
+@dataclass
+class BandCellSample:
+    midpoint: np.ndarray
+    sheet_normal: np.ndarray
+    projected_weight: float
+    sheet_area: float
+    closure: float
+    equilibrium_pressure: float
+    s_star: float
+    I_force: float
+    I_area: float
+    I_s: float
+    force_on_a: np.ndarray
+    force_on_b: np.ndarray
+    moment_a: np.ndarray
+    moment_b: np.ndarray
+
+
+@dataclass
+class BandMechanicsResult:
+    cells: list[BandCellSample]
+    metadata: dict = field(default_factory=dict)
+
+
+@dataclass
+class SheetPatchGeometry:
+    area: float
+    centroid: np.ndarray
+    normal: np.ndarray
+    bbox_min: np.ndarray
+    bbox_max: np.ndarray
+    pressure_center: np.ndarray
+    num_cells: int
+
+
+@dataclass
+class SheetRepresentation:
+    patches: list[SheetPatchGeometry]
     metadata: dict = field(default_factory=dict)
 
 

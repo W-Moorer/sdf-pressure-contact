@@ -14,6 +14,10 @@ from .core import (
     PairSheet,
     PairTractionSample,
     PairTractionField,
+    BandCellSample,
+    BandMechanicsResult,
+    SheetPatchGeometry,
+    SheetRepresentation,
     PairRecord,
     PairWrenchContribution,
     AggregatedContact,
@@ -21,6 +25,7 @@ from .core import (
 )
 from .geometry import (
     SphereGeometry,
+    BoxGeometry,
     PlaneGeometry,
     MeshSDFGeometry,
     MeshGeometryFactoryConfig,
@@ -33,8 +38,12 @@ from .evaluators import (
     PolygonPatchConfig,
     SheetExtractConfig,
     ContactModelConfig,
+    FormalPressureFieldConfig,
+    SheetRepresentationConfig,
     BaselineGridLocalEvaluator,
     PolygonHighAccuracyLocalEvaluator,
+    FormalPressureFieldLocalEvaluator,
+    FormalEndpointBandSheetEvaluator,
 )
 from .pipeline import (
     ContactManager,
