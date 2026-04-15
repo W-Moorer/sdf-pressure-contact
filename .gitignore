@@ -1,0 +1,14 @@
+# Result directories
+result/
+
+# Python files
+__pycache__/
+*.pyc
+
+# IDE files
+.vscode/
+.idea/
+
+# OS files
+.DS_Store
+Thumbs.db
