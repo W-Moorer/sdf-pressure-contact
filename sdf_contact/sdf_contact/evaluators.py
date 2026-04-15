@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 import math
 import numpy as np
-from shapely.geometry import LineString, Polygon, box
+from shapely.geometry import LineString, Polygon, Point, box
 from shapely.ops import polygonize, triangulate, unary_union
 from skimage import measure
 
@@ -23,6 +23,9 @@ from .core import (
     SheetRepresentation,
     Wrench,
     orthonormal_basis_from_normal,
+    BodySource,
+    SDFGeometryDomainSource,
+    quat_to_rotmat,
 )
 
 
@@ -48,6 +51,10 @@ class PolygonPatchConfig:
     ray_span_scale: float = 1.1
     min_polygon_area: float = 1.0e-6
     triangle_rule: str = 'three_point'
+    area_prior_control: bool = True
+    area_prior_min_hit_fraction: float = 0.85
+    area_prior_activation_ratio: float = 0.70
+    area_prior_margin: float = 1.01
 
 
 @dataclass
@@ -335,6 +342,92 @@ def _estimate_initial_pair_frame(source_a: SDFSource, source_b: SDFSource, radiu
     t1, t2 = orthonormal_basis_from_normal(n0)
     return center0, n0, t1, t2, radius, ray_span
 
+
+
+
+def _source_geometry_and_pose(source: SDFSource):
+    if isinstance(source, BodySource):
+        return getattr(source.body, 'geometry', None), getattr(source.body.state, 'pose', None)
+    if isinstance(source, SDFGeometryDomainSource):
+        return getattr(source, 'geometry', None), getattr(source, 'pose', None)
+    body = getattr(source, 'body', None)
+    if body is not None:
+        return getattr(body, 'geometry', None), getattr(body.state, 'pose', None)
+    return getattr(source, 'geometry', None), getattr(source, 'pose', None)
+
+
+def _finite_support_box_face_polygon(source_a: SDFSource, source_b: SDFSource, center0: np.ndarray, n0: np.ndarray, t1: np.ndarray, t2: np.ndarray):
+    geom_a, pose_a = _source_geometry_and_pose(source_a)
+    geom_b, pose_b = _source_geometry_and_pose(source_b)
+    plane_normal = None
+    finite_geom = None
+    finite_pose = None
+    for geom, pose, other_geom in ((geom_a, pose_a, geom_b), (geom_b, pose_b, geom_a)):
+        if geom is None or pose is None:
+            continue
+        if hasattr(other_geom, 'n') and hasattr(geom, 'half'):
+            plane_normal = np.asarray(other_geom.n, dtype=float)
+            finite_geom = geom
+            finite_pose = pose
+            break
+    if plane_normal is None or finite_geom is None or finite_pose is None:
+        return None
+    R = quat_to_rotmat(finite_pose.orientation)
+    axes = [R[:, 0], R[:, 1], R[:, 2]]
+    half = np.asarray(finite_geom.half, dtype=float)
+    dots = [abs(float(np.dot(ax, plane_normal))) for ax in axes]
+    idx = int(np.argmax(dots))
+    if dots[idx] < 0.85:
+        return None
+    sign = -1.0 if float(np.dot(axes[idx], plane_normal)) >= 0.0 else 1.0
+    face_center = np.asarray(finite_pose.position, dtype=float) + sign * half[idx] * axes[idx]
+    other = [j for j in range(3) if j != idx]
+    verts = []
+    for s0 in (-1.0, 1.0):
+        for s1 in (-1.0, 1.0):
+            p = face_center + s0 * half[other[0]] * axes[other[0]] + s1 * half[other[1]] * axes[other[1]]
+            verts.append((float(np.dot(p - center0, t1)), float(np.dot(p - center0, t2))))
+    poly = Polygon(verts).convex_hull
+    return poly if (not poly.is_empty and poly.area > 1.0e-12) else None
+
+
+def _prior_polygon_hit_fraction(source_a: SDFSource, source_b: SDFSource, poly: Polygon, center0: np.ndarray, t1: np.ndarray, t2: np.ndarray, n0: np.ndarray, ray_span: float, column_fn, inset_frac: float = 0.08):
+    if poly.is_empty:
+        return 0.0
+    coords = list(poly.exterior.coords)[:-1]
+    cx, cy = poly.representative_point().x, poly.representative_point().y
+    pts = [(cx, cy)]
+    pts.extend(coords)
+    for i in range(len(coords)):
+        x0, y0 = coords[i]
+        x1, y1 = coords[(i + 1) % len(coords)]
+        pts.append((0.5 * (x0 + x1), 0.5 * (y0 + y1)))
+    hits = 0
+    total = 0
+    for u0, v0 in pts:
+        u = cx + (u0 - cx) * (1.0 - inset_frac)
+        v = cy + (v0 - cy) * (1.0 - inset_frac)
+        p = Point(u, v)
+        if not (poly.contains(p) or poly.touches(p)):
+            continue
+        total += 1
+        seed = _uv_to_world(center0, t1, t2, float(u), float(v))
+        if column_fn(source_a, source_b, seed, n0, ray_span) is not None:
+            hits += 1
+    return float(hits) / max(float(total), 1.0)
+
+
+def _apply_area_prior_control(polys, raw_area: float, prior_poly: Polygon | None, source_a: SDFSource, source_b: SDFSource, center0: np.ndarray, t1: np.ndarray, t2: np.ndarray, n0: np.ndarray, ray_span: float, column_fn, cfg: PolygonPatchConfig):
+    if (not cfg.area_prior_control) or prior_poly is None or prior_poly.is_empty:
+        return polys
+    prior_area = float(prior_poly.area)
+    if prior_area <= cfg.min_polygon_area:
+        return polys
+    hit_fraction = _prior_polygon_hit_fraction(source_a, source_b, prior_poly, center0, t1, t2, n0, ray_span, column_fn)
+    activation_ratio = raw_area / max(prior_area, 1.0e-15)
+    if hit_fraction >= cfg.area_prior_min_hit_fraction and activation_ratio >= cfg.area_prior_activation_ratio:
+        return [prior_poly.buffer(0)]
+    return polys
 
 def _uv_to_world(center0: np.ndarray, t1: np.ndarray, t2: np.ndarray, u: float, v: float) -> np.ndarray:
     return center0 + u * t1 + v * t2
@@ -739,6 +832,10 @@ class FormalPressureFieldLocalEvaluator(PolygonHighAccuracyLocalEvaluator):
         if geom is None:
             return None
         center0, n0, t1, t2, radius, ray_span = geom
+        prior_poly = _finite_support_box_face_polygon(source_a, source_b, center0, n0, t1, t2)
+        if prior_poly is not None and (not prior_poly.is_empty):
+            minx, miny, maxx, maxy = prior_poly.bounds
+            radius = max(radius, self.patch_cfg.area_prior_margin * max(abs(minx), abs(maxx), abs(miny), abs(maxy)))
         radius *= (1.0 + self.patch_cfg.contour_padding_fraction)
 
         N = self.patch_cfg.raster_cells
@@ -758,6 +855,12 @@ class FormalPressureFieldLocalEvaluator(PolygonHighAccuracyLocalEvaluator):
             return None
         merged = unary_union(active_cells)
         polys = [merged] if merged.geom_type == 'Polygon' else [gg for gg in getattr(merged, 'geoms', []) if gg.geom_type == 'Polygon']
+        raw_area = float(sum(float(poly.area) for poly in polys))
+        clip_box = box(-radius, -radius, radius, radius)
+        if prior_poly is not None and (not prior_poly.is_empty):
+            prior_poly = prior_poly.intersection(clip_box)
+            if not prior_poly.is_empty:
+                polys = _apply_area_prior_control(polys, raw_area, prior_poly, source_a, source_b, center0, t1, t2, n0, ray_span, self._column_surfaces, self.patch_cfg)
 
         patch_samples: list[PairPatchSample] = []
         num_triangles = 0
@@ -792,6 +895,8 @@ class FormalPressureFieldLocalEvaluator(PolygonHighAccuracyLocalEvaluator):
                 'num_pair_polygons': len(polys),
                 'num_pair_triangles': num_triangles,
                 'ray_span': float(ray_span),
+                'raw_support_area': float(raw_area),
+                'prior_support_area': float(prior_poly.area) if prior_poly is not None and not prior_poly.is_empty else 0.0,
             },
         )
 
@@ -1094,6 +1199,8 @@ class FormalEndpointBandSheetEvaluator(FormalPressureFieldLocalEvaluator):
             'num_band_cells': band.metadata['num_band_cells'],
             'num_sheet_patches': sheet_repr.metadata.get('num_sheet_patches', 0),
             'total_sheet_area': sheet_repr.metadata.get('total_sheet_area', 0.0),
+            'raw_support_area': patches.metadata.get('raw_support_area', 0.0),
+            'prior_support_area': patches.metadata.get('prior_support_area', 0.0),
             'patch_radius': patches.radius,
             'formal_stiffness_a': self.pressure_cfg.stiffness_for(source_a),
             'formal_stiffness_b': self.pressure_cfg.stiffness_for(source_b),
