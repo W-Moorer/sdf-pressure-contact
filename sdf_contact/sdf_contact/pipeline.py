@@ -76,6 +76,14 @@ class IntegratorConfig:
     acceptance_rel_factor: float = 0.8
     min_dt_fraction: float = 1.0 / 16.0
     max_line_search_trials: int = 8
+    onset_focus_enabled: bool = True
+    onset_force_threshold: float = 1.0e-8
+    onset_refine_substeps: int = 2
+    onset_local_refine_steps: int = 2
+    onset_state_tol: float = 2.5e-4
+    onset_velocity_tol: float = 2.5e-3
+    onset_force_rel_tol: float = 8.0e-2
+    onset_force_abs_tol: float = 1.0e-3
 
 
 def accumulate_all_body_forces(world: World, cm: ContactManager):
@@ -107,6 +115,8 @@ class GlobalImplicitSystemSolver6D:
         self.contact_manager = contact_manager
         self.cfg = integ_cfg or IntegratorConfig()
         self.last_step_diagnostics: dict | None = None
+        self._onset_focus_steps_remaining: int = 0
+        self._last_contact_summary: dict | None = None
 
     def _dynamic_indices(self, world: World):
         return [i for i, b in enumerate(world.bodies) if not b.is_static]
@@ -296,6 +306,125 @@ class GlobalImplicitSystemSolver6D:
         for b, s in zip(world.bodies, snapshot):
             b.state = s.copy()
 
+    def _summary_from_infos(self, world: World, infos) -> dict:
+        info_map = {int(x['body_index']): x for x in infos}
+        bodies = {}
+        any_active = False
+        primary_index = None
+        for i, b in enumerate(world.bodies):
+            if b.is_static:
+                continue
+            if primary_index is None:
+                primary_index = i
+            force = np.asarray(info_map.get(i, {}).get('contact_force', np.zeros(3)), dtype=float)
+            active = bool(np.linalg.norm(force) > self.cfg.onset_force_threshold)
+            bodies[i] = {
+                'active': active,
+                'force': force,
+                'moment': np.asarray(info_map.get(i, {}).get('contact_moment', np.zeros(3)), dtype=float),
+                'y': float(b.state.pose.position[1]),
+                'vy': float(b.state.linear_velocity[1]),
+            }
+            any_active = any_active or active
+        return {'any_active': any_active, 'bodies': bodies, 'primary_index': primary_index}
+
+    def _world_contact_summary(self, world: World) -> dict:
+        contacts = self.contact_manager.compute_all_contacts(world)
+        bodies = {}
+        any_active = False
+        primary_index = None
+        for i, b in enumerate(world.bodies):
+            if b.is_static:
+                continue
+            if primary_index is None:
+                primary_index = i
+            agg = contacts[b.name]
+            force = agg.total_force.copy()
+            active = bool(agg.num_pair_tractions > 0 or np.linalg.norm(force) > self.cfg.onset_force_threshold)
+            bodies[i] = {
+                'active': active,
+                'force': force,
+                'moment': agg.total_moment.copy(),
+                'y': float(b.state.pose.position[1]),
+                'vy': float(b.state.linear_velocity[1]),
+            }
+            any_active = any_active or active
+        return {'any_active': any_active, 'bodies': bodies, 'primary_index': primary_index}
+
+    def _state_snapshot_error(self, world: World, snap_a, snap_b, infos_a, infos_b) -> dict:
+        info_a = {int(x['body_index']): x for x in infos_a}
+        info_b = {int(x['body_index']): x for x in infos_b}
+        pos_err = 0.0
+        vel_err = 0.0
+        force_abs = 0.0
+        force_rel = 0.0
+        for i, b in enumerate(world.bodies):
+            if b.is_static:
+                continue
+            sa = snap_a[i]
+            sb = snap_b[i]
+            pos_err = max(pos_err, float(np.linalg.norm(sa.pose.position - sb.pose.position)))
+            vel_err = max(vel_err, float(np.linalg.norm(sa.linear_velocity - sb.linear_velocity)))
+            fa = np.asarray(info_a.get(i, {}).get('contact_force', np.zeros(3)), dtype=float)
+            fb = np.asarray(info_b.get(i, {}).get('contact_force', np.zeros(3)), dtype=float)
+            diff = float(np.linalg.norm(fa - fb))
+            force_abs = max(force_abs, diff)
+            scale = max(float(np.linalg.norm(fa)), float(np.linalg.norm(fb)), 1.0e-12)
+            force_rel = max(force_rel, diff / scale)
+        return {
+            'pos_err': pos_err,
+            'vel_err': vel_err,
+            'force_abs_err': force_abs,
+            'force_rel_err': force_rel,
+        }
+
+    def _should_accept_local_refine(self, metrics: dict, coarse_summary: dict, fine_summary: dict) -> bool:
+        if coarse_summary.get('any_active') != fine_summary.get('any_active'):
+            return True
+        return (
+            metrics['pos_err'] > self.cfg.onset_state_tol
+            or metrics['vel_err'] > self.cfg.onset_velocity_tol
+            or metrics['force_rel_err'] > self.cfg.onset_force_rel_tol
+            or metrics['force_abs_err'] > self.cfg.onset_force_abs_tol
+        )
+
+    def _execute_uniform_substeps(self, world: World, dt: float, n_parts: int, *, reason: str, force_accept: bool = False):
+        sub_dt = dt / max(int(n_parts), 1)
+        part_diags = []
+        part_summaries = []
+        infos = []
+        for part in range(max(int(n_parts), 1)):
+            ok, infos, diag = self._single_step_attempt(world, sub_dt, force_accept=force_accept)
+            if not ok:
+                return False, [], {
+                    'dt': dt,
+                    'substeps': part + 1,
+                    'accepted': False,
+                    'refine_reason': reason,
+                    'part_diags': part_diags,
+                }, part_summaries
+            summary = self._summary_from_infos(world, infos)
+            part_diags.append(diag)
+            part_summaries.append(summary)
+        merged = {
+            'dt': dt,
+            'substeps': int(sum(int(d.get('substeps', 1)) for d in part_diags)),
+            'accepted': True,
+            'refine_reason': reason,
+            'part_diags': part_diags,
+            'final_residual_norm': float(part_diags[-1].get('final_residual_norm', float('nan'))) if part_diags else float('nan'),
+        }
+        return True, infos, merged, part_summaries
+
+    def _onset_offset_from_part_summaries(self, dt: float, part_summaries: list[dict]) -> float:
+        if not part_summaries:
+            return 0.5 * dt
+        sub_dt = dt / len(part_summaries)
+        for idx, summ in enumerate(part_summaries):
+            if summ.get('any_active'):
+                return max(0.0, min(dt, (idx + 0.5) * sub_dt))
+        return dt
+
     def _accept_step(self, initial_norm: float, final_norm: float) -> bool:
         if not np.isfinite(final_norm):
             return False
@@ -464,11 +593,95 @@ class GlobalImplicitSystemSolver6D:
         return True, infos_b, merged
 
     def step_world(self, world: World):
+        snapshot0 = self._snapshot_world(world)
+        if self.cfg.onset_focus_enabled:
+            start_summary = self._last_contact_summary if self._last_contact_summary is not None else self._world_contact_summary(world)
+        else:
+            start_summary = {'any_active': False}
         success, infos, diag = self._step_recursive(world, self.cfg.dt, 0)
-        self.last_step_diagnostics = diag
         if not success:
+            self.last_step_diagnostics = diag
             return []
-        return infos
+        end_summary = self._summary_from_infos(world, infos) if self.cfg.onset_focus_enabled else {'any_active': False}
+        final_snapshot = self._snapshot_world(world)
+        final_infos = infos
+        final_diag = dict(diag)
+
+        onset_event = self.cfg.onset_focus_enabled and (not start_summary.get('any_active', False)) and end_summary.get('any_active', False)
+        release_event = self.cfg.onset_focus_enabled and start_summary.get('any_active', False) and (not end_summary.get('any_active', False))
+
+        if onset_event:
+            self._restore_world(world, snapshot0)
+            ok_ref, infos_ref, diag_ref, part_summaries = self._execute_uniform_substeps(
+                world,
+                self.cfg.dt,
+                max(2, int(self.cfg.onset_refine_substeps)),
+                reason='onset_uniform_refine',
+                force_accept=True,
+            )
+            if ok_ref:
+                final_snapshot = self._snapshot_world(world)
+                final_infos = infos_ref
+                final_diag = diag_ref
+                final_diag['used_local_refinement'] = True
+                final_diag['onset_time_offset'] = self._onset_offset_from_part_summaries(self.cfg.dt, part_summaries)
+                end_summary = self._summary_from_infos(world, final_infos)
+            else:
+                self._restore_world(world, final_snapshot)
+                final_infos = infos
+                final_diag = dict(diag)
+                final_diag['used_local_refinement'] = False
+                final_diag['onset_time_offset'] = self.cfg.dt
+            self._onset_focus_steps_remaining = max(self._onset_focus_steps_remaining, int(self.cfg.onset_local_refine_steps))
+        elif self.cfg.onset_focus_enabled and self._onset_focus_steps_remaining > 0 and (start_summary.get('any_active', False) or end_summary.get('any_active', False)):
+            coarse_snapshot = final_snapshot
+            coarse_infos = final_infos
+            coarse_diag = dict(final_diag)
+            coarse_end_summary = end_summary
+            self._restore_world(world, snapshot0)
+            ok_ref, infos_ref, diag_ref, _ = self._execute_uniform_substeps(
+                world,
+                self.cfg.dt,
+                2,
+                reason='first_contact_cycle_halfstep_consistency',
+                force_accept=True,
+            )
+            if ok_ref:
+                fine_snapshot = self._snapshot_world(world)
+                fine_end_summary = self._summary_from_infos(world, infos_ref)
+                metrics = self._state_snapshot_error(world, coarse_snapshot, fine_snapshot, coarse_infos, infos_ref)
+                if self._should_accept_local_refine(metrics, coarse_end_summary, fine_end_summary):
+                    final_snapshot = fine_snapshot
+                    final_infos = infos_ref
+                    final_diag = diag_ref
+                    final_diag['used_local_refinement'] = True
+                    final_diag['consistency_metrics'] = metrics
+                    end_summary = fine_end_summary
+                else:
+                    self._restore_world(world, coarse_snapshot)
+                    final_snapshot = coarse_snapshot
+                    final_infos = coarse_infos
+                    final_diag = coarse_diag
+                    final_diag['used_local_refinement'] = False
+                    final_diag['consistency_metrics'] = metrics
+                    end_summary = coarse_end_summary
+            else:
+                self._restore_world(world, coarse_snapshot)
+                final_snapshot = coarse_snapshot
+                final_infos = coarse_infos
+                final_diag = coarse_diag
+                final_diag['used_local_refinement'] = False
+                end_summary = coarse_end_summary
+            self._onset_focus_steps_remaining = max(self._onset_focus_steps_remaining - 1, 0)
+        elif not end_summary.get('any_active', False):
+            self._onset_focus_steps_remaining = 0
+
+        if release_event and not end_summary.get('any_active', False):
+            self._onset_focus_steps_remaining = 0
+
+        self._last_contact_summary = end_summary if self.cfg.onset_focus_enabled else None
+        self.last_step_diagnostics = final_diag
+        return final_infos
 
 
 class Simulator:
