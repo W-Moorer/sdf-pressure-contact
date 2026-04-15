@@ -1,0 +1,3 @@
+solver,scheme,predictor_mode,residual_norm_at_predictor,jacobian_cond_active_mode,sigma_min_active_mode,sigma_max_active_mode,rel_gap_forward_vs_central,predicted_linear_residual_ratio_forward,predicted_linear_residual_ratio_central
+legacy,backward_euler,current_velocity,0.0005007891802824,173.82727986108537,0.00028799999999999995,0.050062256599992576,2.2437689336409576e-08,1.0395394931856522e-14,3.4718867391120703e-15
+tuned,implicit_midpoint,explicit_force,1.734723475976807e-18,173.61111111111111,0.000288,0.05,5.007632259203065e-14,0.0,0.0

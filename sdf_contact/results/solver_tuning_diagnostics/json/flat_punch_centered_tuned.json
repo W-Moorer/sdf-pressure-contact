@@ -1,0 +1,21 @@
+{
+  "n_steps": 19,
+  "first_contact_time": 0.05,
+  "first_release_time": 0.085,
+  "touch_speed_analytic": 0.442944691807002,
+  "analytic_delta_max": 0.004942824987197979,
+  "sim_delta_max_first_cycle": 0.005943743611067712,
+  "rel_err_delta_max": 0.20249930484330986,
+  "max_rel_err_static_force_law_first_cycle": 0.27689222860818974,
+  "mean_rel_err_static_force_law_first_cycle": 0.2669452718048597,
+  "release_speed_sim": 0.4315670834118476,
+  "rel_err_release_speed": 0.025686295841449776,
+  "release_energy_drift_rel_drop_scale": -0.02146637658030058,
+  "max_abs_x_drift": 5.8519917084954485e-18,
+  "max_abs_vx": 1.9718947824558183e-16,
+  "max_body_moment_norm_first_cycle": 3.1372247449879723e-17,
+  "max_solver_final_residual_norm_first_cycle": 9.690874543805128e-10,
+  "max_rel_ground_Mz_relation_first_cycle": NaN,
+  "case": "flat_punch_centered",
+  "solver": "tuned"
+}
