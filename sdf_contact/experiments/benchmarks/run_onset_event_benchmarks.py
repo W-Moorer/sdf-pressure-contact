@@ -62,13 +62,8 @@ def _run_window(case_name, world, solver, delta_fn, static_force_fn, active_step
         delta=max(0.0,float(delta_fn(float(body.state.pose.position[1]))))
         t=(step+1)*DT
         onset_offset=float(diag.get('onset_time_offset', float('nan')))
-        if first_active is None and active:
-            first_active=len(rows)
-            sim_touch=step*DT + (onset_offset if np.isfinite(onset_offset) else DT)
-            refine_reason=str(diag.get('refine_reason',''))
-        if active:
-            active_seen += 1
-        rows.append({
+        onset_aligned=diag.get('onset_aligned')
+        row = {
             'time': t,
             'y': float(body.state.pose.position[1]),
             'vy': float(body.state.linear_velocity[1]),
@@ -80,7 +75,38 @@ def _run_window(case_name, world, solver, delta_fn, static_force_fn, active_step
             'used_local_refinement': int(bool(diag.get('used_local_refinement', False))),
             'refine_reason': str(diag.get('refine_reason','')),
             'onset_time_offset': onset_offset,
-        })
+            'row_source': 'step_end',
+        }
+        if first_active is None and active:
+            sim_touch=step*DT + (onset_offset if np.isfinite(onset_offset) else DT)
+            refine_reason=str(diag.get('refine_reason',''))
+            if isinstance(onset_aligned, dict):
+                b0 = (onset_aligned.get('bodies') or {}).get(0, {})
+                pos = np.asarray(b0.get('position', np.zeros(3)), dtype=float)
+                vel = np.asarray(b0.get('linear_velocity', np.zeros(3)), dtype=float)
+                force = np.asarray(b0.get('contact_force', np.zeros(3)), dtype=float)
+                y0 = float(pos[1]) if pos.size >= 2 else float(body.state.pose.position[1])
+                delta0 = max(0.0, float(delta_fn(y0)))
+                Fy0 = float(force[1]) if force.size >= 2 else Fy
+                row = {
+                    'time': step*DT + float(onset_aligned.get('time_offset', onset_offset if np.isfinite(onset_offset) else DT)),
+                    'y': y0,
+                    'vy': float(vel[1]) if vel.size >= 2 else float(body.state.linear_velocity[1]),
+                    'delta': delta0,
+                    'Fy': Fy0,
+                    'static_Fy_at_delta': float(static_force_fn(delta0)),
+                    'contact_active': int(Fy0 > 1e-8),
+                    'solver_substeps': int(diag.get('substeps',1)) if isinstance(diag.get('substeps',1),(int,float)) else 1,
+                    'used_local_refinement': int(bool(diag.get('used_local_refinement', False))),
+                    'refine_reason': str(diag.get('refine_reason','')),
+                    'onset_time_offset': float(onset_aligned.get('time_offset', onset_offset)),
+                    'row_source': 'onset_aligned',
+                }
+                active = bool(row['contact_active'])
+            first_active=len(rows)
+        if active:
+            active_seen += 1
+        rows.append(row)
         if first_active is not None and active_seen >= active_steps_target:
             break
     df=pd.DataFrame(rows)

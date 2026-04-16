@@ -1,0 +1,5 @@
+case,mode,first_active_time,first_active_rel_err,mean_rel_err_active,max_rel_err_active,n_active_steps
+sphere_centered,baseline,0.075,0.052647997771697,0.02811959800044477,0.052647997771697,3
+sphere_centered,active_interval,0.075,0.2025503400694191,0.0780870454330188,0.2025503400694191,3
+flat_punch_centered,baseline,0.05,0.0143446446828261,0.0143446446828261,0.0143446446828261,1
+flat_punch_centered,active_interval,0.05,0.7267781413335321,0.7267781413335321,0.7267781413335321,1

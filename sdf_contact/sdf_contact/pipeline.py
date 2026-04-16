@@ -84,6 +84,21 @@ class IntegratorConfig:
     onset_velocity_tol: float = 2.5e-3
     onset_force_rel_tol: float = 8.0e-2
     onset_force_abs_tol: float = 1.0e-3
+    onset_bisect_iters: int = 6
+    onset_aligned_post_fraction: float = 0.5
+    onset_microstep_enabled: bool = True
+    onset_microstep_fraction: float = 0.8
+    onset_microstep_min_fraction: float = 0.10
+    early_active_interval_enabled: bool = True
+    early_active_interval_samples: int = 4
+    early_active_interval_report_force: bool = True
+    equivalent_contact_state_enabled: bool = True
+    equivalent_contact_state_fraction: float = 0.5
+    equivalent_contact_state_zero_velocity: bool = True
+    equivalent_contact_state_report_force: bool = False
+    impulse_matched_contact_state_enabled: bool = True
+    impulse_matched_contact_state_report_force: bool = False
+    impulse_match_bisect_iters: int = 10
 
 
 def accumulate_all_body_forces(world: World, cm: ContactManager):
@@ -388,12 +403,272 @@ class GlobalImplicitSystemSolver6D:
             or metrics['force_abs_err'] > self.cfg.onset_force_abs_tol
         )
 
+    def _snapshot_payload(self, snapshot, infos) -> dict:
+        info_map = {int(x['body_index']): x for x in infos}
+        bodies = {}
+        for i, state in enumerate(snapshot):
+            bodies[i] = {
+                'position': state.pose.position.copy(),
+                'orientation': state.pose.orientation.copy(),
+                'linear_velocity': state.linear_velocity.copy(),
+                'angular_velocity': state.angular_velocity.copy(),
+                'contact_force': np.asarray(info_map.get(i, {}).get('contact_force', np.zeros(3)), dtype=float),
+                'contact_moment': np.asarray(info_map.get(i, {}).get('contact_moment', np.zeros(3)), dtype=float),
+            }
+        return {'bodies': bodies}
+
+    def _force_maps_from_infos(self, infos):
+        force_map = {}
+        moment_map = {}
+        for x in infos:
+            bi = int(x['body_index'])
+            force_map[bi] = np.asarray(x.get('contact_force', np.zeros(3)), dtype=float).copy()
+            moment_map[bi] = np.asarray(x.get('contact_moment', np.zeros(3)), dtype=float).copy()
+        return force_map, moment_map
+
+    def _payload_from_snapshot_and_maps(self, snapshot, force_map, moment_map, *, time_offset: float, dt: float | None = None):
+        bodies = {}
+        for i, state in enumerate(snapshot):
+            bodies[i] = {
+                'position': state.pose.position.copy(),
+                'orientation': state.pose.orientation.copy(),
+                'linear_velocity': state.linear_velocity.copy(),
+                'angular_velocity': state.angular_velocity.copy(),
+                'contact_force': np.asarray(force_map.get(i, np.zeros(3)), dtype=float).copy(),
+                'contact_moment': np.asarray(moment_map.get(i, np.zeros(3)), dtype=float).copy(),
+            }
+        payload = {'bodies': bodies, 'time_offset': float(time_offset)}
+        if dt is not None:
+            payload['dt'] = float(dt)
+        return payload
+
+    def _replace_infos_with_payload(self, infos, payload):
+        bodies = (payload or {}).get('bodies', {}) if isinstance(payload, dict) else {}
+        out = []
+        for x in infos:
+            bi = int(x['body_index'])
+            y = dict(x)
+            body = bodies.get(bi, {})
+            if 'contact_force' in body:
+                y['contact_force'] = np.asarray(body['contact_force'], dtype=float).copy()
+            if 'contact_moment' in body:
+                y['contact_moment'] = np.asarray(body['contact_moment'], dtype=float).copy()
+            out.append(y)
+        return out
+
+
+    def _primary_dynamic_body_index(self, world: World) -> int | None:
+        for i, b in enumerate(world.bodies):
+            if not b.is_static:
+                return i
+        return None
+
+    def _interpolate_snapshots(self, snap_a, snap_b, alpha: float):
+        a = float(np.clip(alpha, 0.0, 1.0))
+        out = []
+        for sa, sb in zip(snap_a, snap_b):
+            pos = (1.0 - a) * sa.pose.position + a * sb.pose.position
+            q = (1.0 - a) * sa.pose.orientation + a * sb.pose.orientation
+            qn = np.linalg.norm(q)
+            if qn <= 1.0e-15:
+                q = sa.pose.orientation.copy()
+            else:
+                q = q / qn
+            lin = (1.0 - a) * sa.linear_velocity + a * sb.linear_velocity
+            ang = (1.0 - a) * sa.angular_velocity + a * sb.angular_velocity
+            out.append(BodyState6D(Pose6D(pos.astype(float).copy(), q.astype(float).copy()), lin.astype(float).copy(), ang.astype(float).copy()))
+        return out
+
+    def _scalar_force_from_payload(self, payload, body_index: int, direction: np.ndarray) -> float:
+        body = ((payload or {}).get('bodies') or {}).get(body_index, {}) if isinstance(payload, dict) else {}
+        force = np.asarray(body.get('contact_force', np.zeros(3)), dtype=float)
+        return float(np.dot(force, direction))
+
+    def _impulse_matched_equivalent_payload(self, world: World, onset_snapshot, end_snapshot, avg_force_map, *, time_offset: float, duration: float):
+        if (not self.cfg.impulse_matched_contact_state_enabled) or duration <= 1.0e-12:
+            return None
+        body_index = self._primary_dynamic_body_index(world)
+        if body_index is None:
+            return None
+        target_force = np.asarray(avg_force_map.get(body_index, np.zeros(3)), dtype=float)
+        target_norm = float(np.linalg.norm(target_force))
+        if target_norm <= self.cfg.onset_force_threshold:
+            return None
+        direction = target_force / target_norm
+        snapshot_keep = self._snapshot_world(world)
+        try:
+            payload0 = self._evaluate_static_contact_payload(world, onset_snapshot, time_offset=time_offset, dt=0.0)
+            payload1 = self._evaluate_static_contact_payload(world, end_snapshot, time_offset=time_offset + duration, dt=duration)
+            f0 = self._scalar_force_from_payload(payload0, body_index, direction)
+            f1 = self._scalar_force_from_payload(payload1, body_index, direction)
+            target_scalar = float(np.dot(target_force, direction))
+            lo, hi = 0.0, 1.0
+            pay_lo, pay_hi = payload0, payload1
+            flo, fhi = f0, f1
+            if min(flo, fhi) <= target_scalar <= max(flo, fhi) and abs(fhi - flo) > 1.0e-12:
+                best_alpha = 0.5
+                best_payload = None
+                best_err = float('inf')
+                for _ in range(max(int(self.cfg.impulse_match_bisect_iters), 1)):
+                    mid = 0.5 * (lo + hi)
+                    snap_mid = self._interpolate_snapshots(onset_snapshot, end_snapshot, mid)
+                    pay_mid = self._evaluate_static_contact_payload(world, snap_mid, time_offset=time_offset + mid * duration, dt=mid * duration)
+                    fmid = self._scalar_force_from_payload(pay_mid, body_index, direction)
+                    err = abs(fmid - target_scalar)
+                    if err < best_err:
+                        best_err = err
+                        best_alpha = mid
+                        best_payload = pay_mid
+                    if (flo <= target_scalar <= fmid) or (fmid <= target_scalar <= flo):
+                        hi = mid
+                        pay_hi = pay_mid
+                        fhi = fmid
+                    else:
+                        lo = mid
+                        pay_lo = pay_mid
+                        flo = fmid
+                if best_payload is not None:
+                    best_payload['impulse_match_alpha'] = float(best_alpha)
+                    best_payload['impulse_match_target_force'] = target_force.copy()
+                    return best_payload
+            # fallback: choose closer endpoint static state
+            if abs(f1 - target_scalar) <= abs(f0 - target_scalar):
+                payload1['impulse_match_alpha'] = 1.0
+                payload1['impulse_match_target_force'] = target_force.copy()
+                return payload1
+            payload0['impulse_match_alpha'] = 0.0
+            payload0['impulse_match_target_force'] = target_force.copy()
+            return payload0
+        finally:
+            self._restore_world(world, snapshot_keep)
+
+    def _evaluate_static_contact_payload(self, world: World, snapshot, *, time_offset: float, dt: float | None = None):
+        snapshot_keep = self._snapshot_world(world)
+        self._restore_world(world, snapshot)
+        if self.cfg.equivalent_contact_state_zero_velocity:
+            for b in world.bodies:
+                if not b.is_static:
+                    b.state.linear_velocity[:] = 0.0
+                    b.state.angular_velocity[:] = 0.0
+        contacts = self.contact_manager.compute_all_contacts(world)
+        force_map = {}
+        moment_map = {}
+        for i, b in enumerate(world.bodies):
+            if b.is_static:
+                continue
+            agg = contacts[b.name]
+            force_map[i] = agg.total_force.copy()
+            moment_map[i] = agg.total_moment.copy()
+        snap = self._snapshot_world(world)
+        payload = self._payload_from_snapshot_and_maps(snap, force_map, moment_map, time_offset=time_offset, dt=dt)
+        self._restore_world(world, snapshot_keep)
+        return payload
+
+    def _reconstruct_active_interval_payload(self, world: World, onset_snapshot, onset_infos, remaining_dt: float, base_time_offset: float):
+        if (not self.cfg.early_active_interval_enabled) or remaining_dt <= 1.0e-12:
+            return None
+        snapshot_keep = self._snapshot_world(world)
+        n = max(int(self.cfg.early_active_interval_samples), 1)
+        dt_seg = remaining_dt / n
+        start_force_map, start_moment_map = self._force_maps_from_infos(onset_infos)
+        self._restore_world(world, onset_snapshot)
+        records = []
+        cur_time = float(base_time_offset)
+        for k in range(n):
+            ok, infos_seg, _ = self._single_step_attempt(world, dt_seg, force_accept=True)
+            if not ok:
+                break
+            snap_seg = self._snapshot_world(world)
+            cur_time += dt_seg
+            force_map, moment_map = self._force_maps_from_infos(infos_seg)
+            records.append({
+                'time': cur_time,
+                'snapshot': snap_seg,
+                'infos': infos_seg,
+                'force_map': force_map,
+                'moment_map': moment_map,
+            })
+        if not records:
+            self._restore_world(world, snapshot_keep)
+            return None
+
+        # midpoint state/force
+        target_time = float(base_time_offset + 0.5 * remaining_dt)
+        self._restore_world(world, onset_snapshot)
+        ok_mid, infos_mid, _ = self._single_step_attempt(world, 0.5 * remaining_dt, force_accept=True)
+        midpoint_snapshot = None
+        if ok_mid:
+            snap_mid = self._snapshot_world(world)
+            midpoint_snapshot = snap_mid
+            mid_force_map, mid_moment_map = self._force_maps_from_infos(infos_mid)
+            midpoint_payload = self._payload_from_snapshot_and_maps(snap_mid, mid_force_map, mid_moment_map, time_offset=target_time, dt=0.5 * remaining_dt)
+        else:
+            rec_mid = min(records, key=lambda r: abs(r['time'] - target_time))
+            midpoint_snapshot = rec_mid['snapshot']
+            midpoint_payload = self._payload_from_snapshot_and_maps(rec_mid['snapshot'], rec_mid['force_map'], rec_mid['moment_map'], time_offset=rec_mid['time'])
+
+        equivalent_payload = None
+        if self.cfg.equivalent_contact_state_enabled and midpoint_snapshot is not None:
+            equivalent_payload = self._evaluate_static_contact_payload(
+                world,
+                midpoint_snapshot,
+                time_offset=float(base_time_offset + float(self.cfg.equivalent_contact_state_fraction) * remaining_dt),
+                dt=float(self.cfg.equivalent_contact_state_fraction) * remaining_dt,
+            )
+
+        # trapezoidal average of force/moment over active remainder using onset state as left endpoint
+        avg_force_map = {i: np.zeros(3, dtype=float) for i in range(len(snapshot_keep))}
+        avg_moment_map = {i: np.zeros(3, dtype=float) for i in range(len(snapshot_keep))}
+        prev_time = float(base_time_offset)
+        prev_force_map = start_force_map
+        prev_moment_map = start_moment_map
+        for rec in records:
+            dt_loc = max(float(rec['time'] - prev_time), 0.0)
+            for i in range(len(snapshot_keep)):
+                f0 = np.asarray(prev_force_map.get(i, np.zeros(3)), dtype=float)
+                f1 = np.asarray(rec['force_map'].get(i, np.zeros(3)), dtype=float)
+                m0 = np.asarray(prev_moment_map.get(i, np.zeros(3)), dtype=float)
+                m1 = np.asarray(rec['moment_map'].get(i, np.zeros(3)), dtype=float)
+                avg_force_map[i] += 0.5 * (f0 + f1) * dt_loc
+                avg_moment_map[i] += 0.5 * (m0 + m1) * dt_loc
+            prev_time = float(rec['time'])
+            prev_force_map = rec['force_map']
+            prev_moment_map = rec['moment_map']
+        duration = max(float(records[-1]['time'] - base_time_offset), 1.0e-15)
+        for i in avg_force_map:
+            avg_force_map[i] = avg_force_map[i] / duration
+            avg_moment_map[i] = avg_moment_map[i] / duration
+        avg_snapshot = snap_mid if ok_mid else rec_mid['snapshot']
+        average_payload = self._payload_from_snapshot_and_maps(avg_snapshot, avg_force_map, avg_moment_map, time_offset=float(base_time_offset + 0.5 * duration), dt=duration)
+        impulse_payload = self._impulse_matched_equivalent_payload(
+            world,
+            onset_snapshot,
+            records[-1]['snapshot'],
+            avg_force_map,
+            time_offset=float(base_time_offset),
+            duration=float(duration),
+        )
+        self._restore_world(world, snapshot_keep)
+        out = {
+            'midpoint': midpoint_payload,
+            'average': average_payload,
+            'duration': float(duration),
+            'samples': len(records),
+        }
+        if equivalent_payload is not None:
+            out['equivalent_state'] = equivalent_payload
+        if impulse_payload is not None:
+            out['impulse_matched_state'] = impulse_payload
+        return out
+
     def _execute_uniform_substeps(self, world: World, dt: float, n_parts: int, *, reason: str, force_accept: bool = False):
         sub_dt = dt / max(int(n_parts), 1)
         part_diags = []
         part_summaries = []
+        part_records = []
         infos = []
         for part in range(max(int(n_parts), 1)):
+            part_start_snapshot = self._snapshot_world(world)
             ok, infos, diag = self._single_step_attempt(world, sub_dt, force_accept=force_accept)
             if not ok:
                 return False, [], {
@@ -402,10 +677,19 @@ class GlobalImplicitSystemSolver6D:
                     'accepted': False,
                     'refine_reason': reason,
                     'part_diags': part_diags,
-                }, part_summaries
+                }, part_summaries, part_records
+            part_end_snapshot = self._snapshot_world(world)
             summary = self._summary_from_infos(world, infos)
             part_diags.append(diag)
             part_summaries.append(summary)
+            part_records.append({
+                'part_index': part,
+                'dt': sub_dt,
+                'start_snapshot': part_start_snapshot,
+                'end_snapshot': part_end_snapshot,
+                'summary': summary,
+                'infos': infos,
+            })
         merged = {
             'dt': dt,
             'substeps': int(sum(int(d.get('substeps', 1)) for d in part_diags)),
@@ -414,7 +698,78 @@ class GlobalImplicitSystemSolver6D:
             'part_diags': part_diags,
             'final_residual_norm': float(part_diags[-1].get('final_residual_norm', float('nan'))) if part_diags else float('nan'),
         }
-        return True, infos, merged, part_summaries
+        return True, infos, merged, part_summaries, part_records
+
+    def _localize_onset_sample(self, world: World, start_snapshot, part_dt: float, prefix_dt: float) -> dict | None:
+        snapshot_keep = self._snapshot_world(world)
+        lo = 0.0
+        hi = part_dt
+        best = None
+        best_infos = []
+        onset_time = None
+        onset_snapshot = None
+        onset_infos = []
+        for _ in range(max(int(self.cfg.onset_bisect_iters), 1)):
+            mid = 0.5 * (lo + hi)
+            self._restore_world(world, start_snapshot)
+            ok, infos_mid, _ = self._single_step_attempt(world, mid, force_accept=True)
+            if not ok:
+                lo = mid
+                continue
+            summary_mid = self._summary_from_infos(world, infos_mid)
+            if summary_mid.get('any_active', False):
+                hi = mid
+                best = self._snapshot_world(world)
+                best_infos = infos_mid
+                onset_time = mid
+                onset_snapshot = self._snapshot_world(world)
+                onset_infos = infos_mid
+            else:
+                lo = mid
+        if best is None or onset_snapshot is None or onset_time is None:
+            self._restore_world(world, snapshot_keep)
+            return None
+
+        payload = self._snapshot_payload(onset_snapshot, onset_infos)
+        payload['time_offset'] = float(prefix_dt + onset_time)
+
+        # Optional aligned sample later within the same localized part, still reconstructed from the localized onset state.
+        if self.cfg.onset_aligned_post_fraction > 0.0:
+            remaining = max(part_dt - onset_time, 0.0)
+            post_dt = remaining * float(self.cfg.onset_aligned_post_fraction)
+            if post_dt > 1.0e-12:
+                self._restore_world(world, onset_snapshot)
+                ok2, infos2, _ = self._single_step_attempt(world, post_dt, force_accept=True)
+                if ok2:
+                    aligned_snapshot = self._snapshot_world(world)
+                    payload['onset_aligned'] = self._snapshot_payload(aligned_snapshot, infos2)
+                    payload['onset_aligned']['time_offset'] = float(prefix_dt + onset_time + post_dt)
+
+        if self.cfg.onset_microstep_enabled:
+            remaining = max(part_dt - onset_time, 0.0)
+            micro_dt = min(remaining, max(part_dt * float(self.cfg.onset_microstep_min_fraction), remaining * float(self.cfg.onset_microstep_fraction)))
+            if micro_dt > 1.0e-12:
+                self._restore_world(world, onset_snapshot)
+                ok3, infos3, _ = self._single_step_attempt(world, micro_dt, force_accept=True)
+                if ok3:
+                    micro_snapshot = self._snapshot_world(world)
+                    payload['onset_microstep'] = self._snapshot_payload(micro_snapshot, infos3)
+                    payload['onset_microstep']['time_offset'] = float(prefix_dt + onset_time + micro_dt)
+                    payload['onset_microstep']['dt'] = float(micro_dt)
+
+        active_interval = self._reconstruct_active_interval_payload(world, onset_snapshot, onset_infos, max(part_dt - onset_time, 0.0), float(prefix_dt + onset_time))
+        if active_interval is not None:
+            payload['onset_active_interval_mid'] = active_interval['midpoint']
+            payload['onset_active_interval_avg'] = active_interval['average']
+            if 'equivalent_state' in active_interval:
+                payload['onset_equivalent_state'] = active_interval['equivalent_state']
+            if 'impulse_matched_state' in active_interval:
+                payload['onset_impulse_matched_state'] = active_interval['impulse_matched_state']
+            payload['onset_active_interval_duration'] = float(active_interval['duration'])
+            payload['onset_active_interval_samples'] = int(active_interval['samples'])
+
+        self._restore_world(world, snapshot_keep)
+        return payload
 
     def _onset_offset_from_part_summaries(self, dt: float, part_summaries: list[dict]) -> float:
         if not part_summaries:
@@ -612,7 +967,7 @@ class GlobalImplicitSystemSolver6D:
 
         if onset_event:
             self._restore_world(world, snapshot0)
-            ok_ref, infos_ref, diag_ref, part_summaries = self._execute_uniform_substeps(
+            ok_ref, infos_ref, diag_ref, part_summaries, part_records = self._execute_uniform_substeps(
                 world,
                 self.cfg.dt,
                 max(2, int(self.cfg.onset_refine_substeps)),
@@ -625,6 +980,39 @@ class GlobalImplicitSystemSolver6D:
                 final_diag = diag_ref
                 final_diag['used_local_refinement'] = True
                 final_diag['onset_time_offset'] = self._onset_offset_from_part_summaries(self.cfg.dt, part_summaries)
+                onset_payload = None
+                for rec in part_records:
+                    if rec['summary'].get('any_active', False):
+                        onset_payload = self._localize_onset_sample(
+                            world,
+                            rec['start_snapshot'],
+                            float(rec['dt']),
+                            float(rec['part_index']) * float(rec['dt']),
+                        )
+                        break
+                if onset_payload is not None:
+                    final_diag['onset_state'] = onset_payload
+                    if 'onset_aligned' in onset_payload:
+                        final_diag['onset_aligned'] = onset_payload['onset_aligned']
+                    else:
+                        final_diag['onset_aligned'] = onset_payload
+                    if 'onset_microstep' in onset_payload:
+                        final_diag['onset_microstep'] = onset_payload['onset_microstep']
+                    if 'onset_active_interval_mid' in onset_payload:
+                        final_diag['onset_active_interval_mid'] = onset_payload['onset_active_interval_mid']
+                    if 'onset_active_interval_avg' in onset_payload:
+                        final_diag['onset_active_interval_avg'] = onset_payload['onset_active_interval_avg']
+                    if 'onset_equivalent_state' in onset_payload:
+                        final_diag['onset_equivalent_state'] = onset_payload['onset_equivalent_state']
+                    if 'onset_impulse_matched_state' in onset_payload:
+                        final_diag['onset_impulse_matched_state'] = onset_payload['onset_impulse_matched_state']
+                    if self.cfg.impulse_matched_contact_state_report_force and 'onset_impulse_matched_state' in onset_payload:
+                        final_infos = self._replace_infos_with_payload(final_infos, onset_payload['onset_impulse_matched_state'])
+                    elif self.cfg.equivalent_contact_state_report_force and 'onset_equivalent_state' in onset_payload:
+                        final_infos = self._replace_infos_with_payload(final_infos, onset_payload['onset_equivalent_state'])
+                    elif self.cfg.early_active_interval_report_force and 'onset_active_interval_avg' in onset_payload:
+                        final_infos = self._replace_infos_with_payload(final_infos, onset_payload['onset_active_interval_avg'])
+                    final_diag['onset_time_offset'] = float(onset_payload.get('time_offset', final_diag['onset_time_offset']))
                 end_summary = self._summary_from_infos(world, final_infos)
             else:
                 self._restore_world(world, final_snapshot)
@@ -639,7 +1027,7 @@ class GlobalImplicitSystemSolver6D:
             coarse_diag = dict(final_diag)
             coarse_end_summary = end_summary
             self._restore_world(world, snapshot0)
-            ok_ref, infos_ref, diag_ref, _ = self._execute_uniform_substeps(
+            ok_ref, infos_ref, diag_ref, _, _ = self._execute_uniform_substeps(
                 world,
                 self.cfg.dt,
                 2,

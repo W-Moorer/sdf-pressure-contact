@@ -1,60 +1,56 @@
-# Minimal SDF Contact Repository
+# SDF Contact Release Repository
 
-A cleaned-up repository for **reasonably accurate normal contact on arbitrary watertight triangle meshes**.
+A cleaned release-oriented repository for **reasonably accurate normal contact on arbitrary watertight triangle meshes**, with a single recommended mainline and archived experiments kept separately.
 
-This repo is intentionally organized around one main goal:
+## Recommended mainline
 
-> Given two SDF-backed objects or meshes and their poses, compute a reasonably accurate normal contact force, moment, and local contact geometry.
+Use the repository root as the main implementation path:
 
-## What was kept
+- **formal endpoint evaluator** for normal contact
+- **flat support area prior** for large flat / large support contacts
+- **tuned default solver**
+  - implicit midpoint flavor
+  - central finite-difference Jacobian
+  - adaptive substepping enabled
+- **`step_end`** as the current best-supported first-contact reporting quantity
 
-- A **single main contact path** based on a high-accuracy local evaluator:
-  contour extraction -> polygon footprint -> triangulation -> quadrature -> dual root solves -> traction accumulation.
-- A **baseline evaluator** for comparison and regression tests.
-- A **midpoint default implicit solver with adaptive substepping** so the evaluator can still be embedded into dynamics.
-- A **benchmark module** so accuracy is defined by reproducible cases instead of intuition.
-
-## What was removed
-
-- Versioned framework sprawl (`v9`, `v10b`, `v10e`) as first-class entry points.
-- Multiple overlapping contact managers.
-- Geometry and solver logic mixed into the evaluator module.
-
-## Minimal directory layout
+## Repository layout
 
 ```text
-sdf_contact_minimal_repo/
+.
+├── sdf_contact/                # mainline library code
+├── benchmarks/                 # recommended benchmark entry points
+├── results/                    # current mainline benchmark outputs
+├── docs/                       # mainline documentation
+├── experiments/                # archived non-default research branches
+├── examples/
 ├── README.md
 ├── pyproject.toml
-├── requirements.txt
-├── docs/
-│   └── RESTRUCTURE_PLAN.md
-├── examples/
-│   └── local_accuracy_demo.py
-└── sdf_contact/
-    ├── __init__.py
-    ├── core.py
-    ├── geometry.py
-    ├── evaluators.py
-    ├── pipeline.py
-    └── benchmarks.py
+└── requirements.txt
 ```
 
-## Design principles
+## What stays in the mainline
 
-1. **Local evaluator first**: benchmark local contact accuracy before restructuring the global solver.
-2. **One default evaluator**: the polygon high-accuracy evaluator is the main path.
-3. **Benchmark-driven accuracy**: “accurate enough” is decided by force, moment, convergence, and robustness tests.
-4. **Watertight meshes first**: the included mesh SDF backend is a self-contained brute-force reference implementation. It is not optimized. For production-scale models, swap in VDB/NanoVDB or another fast signed-distance backend.
+The root package keeps the branches that currently provide the best validated overall behavior:
 
-## Suggested workflow
+- static/contact accuracy path
+- formal analytic validation path
+- quasi-static dynamics path
+- free-body dynamics path
+- flat-support-area-prior regression
+- acceptance gates
 
-1. Use `PolygonHighAccuracyLocalEvaluator` for all new experiments.
-2. Use `BaselineGridLocalEvaluator` only for comparison.
-3. Validate on static / quasi-static benchmark families first.
-4. The default solver is now the tuned midpoint solver; see `docs/DEFAULT_SOLVER.md`.
-5. Only then decide whether the global implicit solver needs further refactoring beyond the default midpoint/adaptive path.
-6. Run the admission gates in `docs/BENCHMARK_ACCEPTANCE.md` to decide whether an evaluator is merely research-usable or genuinely production-ready.
+## What moved into `experiments/`
+
+Archived development branches include:
+
+- onset-event refinement variants
+- onset-aligned / micro-step force reporting variants
+- early-active interval force reporting
+- equivalent contact state and impulse-matched contact state experiments
+- standalone solver tuning diagnostics
+
+These remain useful as research artifacts but are not the current default recommendation.
 
 ## Quick start
 
@@ -104,18 +100,22 @@ contacts = manager.compute_all_contacts(world)
 print(contacts['ball'].total_force)
 ```
 
-## Notes on accuracy
+## Recommended benchmark entry points
 
-The included polygon evaluator is substantially closer to the formal “quad-sheet” route than the old uv-grid sampler, but it is still an approximation:
+- `benchmarks/run_local_evaluator_benchmarks.py`
+- `benchmarks/run_acceptance_gates.py`
+- `benchmarks/run_formal_analytic_validation.py`
+- `benchmarks/run_endpoint_final_validation.py`
+- `benchmarks/run_quasistatic_dynamics_benchmarks.py`
+- `benchmarks/run_free_body_dynamics_benchmarks.py`
+- `benchmarks/run_flat_punch_support_area_prior_benchmarks.py`
 
-- overlap contours are extracted from a rasterized local overlap field;
-- footprint clipping is polygon-accurate **after** that rasterization step;
-- the sheet normal is still approximated from the two recovered surface normals.
+## Mainline status
 
-This repository therefore gives you a **clean experimental baseline** for deciding what to improve next. The benchmark suite now also has an explicit admission standard in `docs/BENCHMARK_ACCEPTANCE.md`, together with an automated evaluator gate script in `benchmarks/run_acceptance_gates.py`.
+This repository is best understood as a **clean research release**:
 
-This repository therefore gives you a **clean experimental baseline** for deciding what to improve next:
+- static evaluator path: strong
+- free-body dynamics: usable and much improved from the original baseline
+- first-contact experimental variants: preserved, but not promoted to default
 
-- replace the normal with `∇h / ||∇h||`;
-- replace sheet-point traction with a true local-normal band accumulator;
-- replace brute-force mesh distance with a fast sparse SDF backend.
+See `docs/RELEASE_MAINLINE.md` for the rationale behind the current default choices.
