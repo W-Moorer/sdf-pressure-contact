@@ -11,7 +11,9 @@ from pfcsdf.contact.native_band import (
     accumulate_higher_order_sparse_sdf_native_band_wrench,
     sample_linear_pfc_balance_fields,
 )
+from pfcsdf.geometry.base import SignedDistanceGeometry
 from pfcsdf.geometry.primitives import BoxFootprint, PlaneSDF, SphereSDF
+from pfcsdf.geometry.transforms import TransformedGeometry
 from pfcsdf.geometry.volume import UniformGrid3D
 from pfcsdf.physics.pressure import LinearPressureLaw
 from pfcsdf.solvers.static import compute_sphere_plane_contact_linear_exact
@@ -191,6 +193,11 @@ class NativeBandSphereContactModel:
             return None
         return self._continuity_state.previous
 
+    def build_contact_geometries(self, gap: float) -> tuple[SignedDistanceGeometry, SignedDistanceGeometry]:
+        sphere = SphereSDF(center=np.array([0.0, 0.0, self.setup.sphere_radius + gap]), radius=self.setup.sphere_radius)
+        plane = PlaneSDF(point=np.array([0.0, 0.0, 0.0]), normal=np.array([0.0, 0.0, 1.0]))
+        return sphere, plane
+
     def evaluate(
         self,
         gap: float,
@@ -210,8 +217,7 @@ class NativeBandSphereContactModel:
             boundary_only_update = self.boundary_only_update
         if warm_start_snapshot is None:
             warm_start_snapshot = self.warm_start_snapshot
-        sphere = SphereSDF(center=np.array([0.0, 0.0, self.setup.sphere_radius + gap]), radius=self.setup.sphere_radius)
-        plane = PlaneSDF(point=np.array([0.0, 0.0, 0.0]), normal=np.array([0.0, 0.0, 1.0]))
+        sphere, plane = self.build_contact_geometries(gap)
         fields = sample_linear_pfc_balance_fields(
             self.grid, sphere, plane, self.law_a, self.law_b, max_depth_a=self.max_depth_a, max_depth_b=self.max_depth_b
         )
@@ -242,6 +248,45 @@ class NativeBandSphereContactModel:
 
     def __call__(self, state: NormalDynamicsState) -> ModelEvaluation:
         return self.evaluate(state.gap)
+
+
+class MeshNativeBandSphereContactModel(NativeBandSphereContactModel):
+    """Sphere-plane native-band validation model using a mesh-derived local SDF."""
+
+    def __init__(
+        self,
+        setup: SphereImpactSetup,
+        grid: UniformGrid3D,
+        config: NativeBandAccumulatorConfig,
+        *,
+        sphere_geometry_local: SignedDistanceGeometry,
+        max_depth_a: float,
+        max_depth_b: float,
+        use_continuity_warm_start: bool = True,
+        boundary_only_update: bool = True,
+        continuity_dilation_radius: int = 1,
+        consistent_traction_reconstruction: bool = True,
+    ) -> None:
+        super().__init__(
+            setup,
+            grid,
+            config,
+            max_depth_a=max_depth_a,
+            max_depth_b=max_depth_b,
+            use_continuity_warm_start=use_continuity_warm_start,
+            boundary_only_update=boundary_only_update,
+            continuity_dilation_radius=continuity_dilation_radius,
+            consistent_traction_reconstruction=consistent_traction_reconstruction,
+        )
+        self.sphere_geometry_local = sphere_geometry_local
+
+    def build_contact_geometries(self, gap: float) -> tuple[SignedDistanceGeometry, SignedDistanceGeometry]:
+        sphere = TransformedGeometry.from_translation(
+            self.sphere_geometry_local,
+            np.array([0.0, 0.0, self.setup.sphere_radius + gap], dtype=float),
+        )
+        plane = PlaneSDF(point=np.array([0.0, 0.0, 0.0]), normal=np.array([0.0, 0.0, 1.0]))
+        return sphere, plane
 
 @dataclass(frozen=True)
 class DynamicHistory:

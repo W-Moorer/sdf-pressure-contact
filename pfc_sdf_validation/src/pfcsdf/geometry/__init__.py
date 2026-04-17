@@ -6,6 +6,7 @@ from .base import (
     signed_distance_gradient,
 )
 from .grid_sdf import GridSDFGeometry
+from .mesh_factory import MeshAssetGeometryBuildResult, build_mesh_asset_sdf_geometry
 from .mesh_io import TriangleMesh, load_obj_triangle_mesh
 from .mesh_preprocess import MeshValidationReport, inspect_triangle_mesh, triangle_mesh_aabb, validate_triangle_mesh
 from .mesh_sdf import MeshGridSDFBuildResult, build_mesh_grid_sdf, mesh_signed_distance, mesh_to_grid_sdf
@@ -21,6 +22,8 @@ __all__ = [
     "signed_distance_gradient",
     "TransformedGeometry",
     "GridSDFGeometry",
+    "MeshAssetGeometryBuildResult",
+    "build_mesh_asset_sdf_geometry",
     "TriangleMesh",
     "load_obj_triangle_mesh",
     "MeshValidationReport",
