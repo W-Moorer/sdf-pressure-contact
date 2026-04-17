@@ -24,7 +24,7 @@ def test_sdf_native_band_approximates_sphere_plane_linear_force():
     nx = ny = 121
     nz = 80
     grid = UniformGrid3D(
-        origin=np.array([-0.5 * nx * dx + 0.5 * dx, -0.5 * ny * dy + 0.5 * dy, -0.25 + 0.5 * dz]),
+        origin=np.array([-0.5 * nx * dx, -0.5 * ny * dy, -0.25]),
         spacing=np.array([dx, dy, dz]),
         shape=(nx, ny, nz),
     )

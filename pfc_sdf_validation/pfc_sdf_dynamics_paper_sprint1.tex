@@ -37,6 +37,8 @@
 
 本文采取的策略不是重新发明一套显式曲面接触算法，而是保留 PFC 的物理主干，将默认数值求解器改造成 \textbf{SDF-native} 的窄带累加器。我们把 marching-cubes、curved-sheet reconstruction 等显式表面重建技术降格为参考链与调试链，而把真正的动力学主链建立在 SDF 所定义的体场之上：由深度场构造压力场，再由压力差场构造平衡条件，最后在窄带 sparse active cells 上直接累计 wrench。围绕这条主链，Sprint 1 的重点不是继续堆新算法，而是完成一套投稿闭环：统一实验入口、统一配置、统一导表导图、并将长时程 flat/sphere/native-band 结果组织成一条清晰的 ablation 故事。
 
+\noindent\textit{For all native-band experiments in this paper, native-band now uses cell-centered volumetric sampling and cell-centered footprint support masking.}
+
 本文的主要贡献概括为三点：
 \begin{enumerate}
     \item 提出并实现了一种 \textbf{SDF-native 的 PFC 动力学求解主链}，以窄带/稀疏 active-cell 累加取代显式接触面恢复作为默认路径。

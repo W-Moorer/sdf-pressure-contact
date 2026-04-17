@@ -17,7 +17,7 @@ def build_flat_fields(*, overlap: float, k_a: float, k_b: float):
     dz = 0.01
     nx, ny, nz = 40, 24, 81
     grid = UniformGrid3D(
-        origin=np.array([-0.5 * nx * dx + 0.5 * dx, -0.5 * ny * dy + 0.5 * dy, -0.5 * nz * dz + 0.5 * dz]),
+        origin=np.array([-0.5 * nx * dx, -0.5 * ny * dy, -0.5 * nz * dz]),
         spacing=np.array([dx, dy, dz]),
         shape=(nx, ny, nz),
     )

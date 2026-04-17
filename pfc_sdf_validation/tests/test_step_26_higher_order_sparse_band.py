@@ -18,7 +18,7 @@ def build_underresolved_flat_fields(*, overlap: float, k_a: float, k_b: float):
     dz = 0.02
     nx, ny, nz = 20, 12, 21
     grid = UniformGrid3D(
-        origin=np.array([-0.5 * nx * dx + 0.5 * dx, -0.5 * ny * dy + 0.5 * dy, -0.5 * nz * dz + 0.5 * dz]),
+        origin=np.array([-0.5 * nx * dx, -0.5 * ny * dy, -0.5 * nz * dz]),
         spacing=np.array([dx, dy, dz]),
         shape=(nx, ny, nz),
     )

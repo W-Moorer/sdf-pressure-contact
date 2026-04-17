@@ -311,7 +311,7 @@ def sample_linear_pfc_balance_fields(
     for i in range(shape[0]):
         for j in range(shape[1]):
             for k in range(shape[2]):
-                x = grid.point(i, j, k)
+                x = grid.cell_center_point(i, j, k)
                 phi_a = float(sdf_a.signed_distance(x))
                 phi_b = float(sdf_b.signed_distance(x))
                 d_a = float(depth_from_phi(phi_a, max_depth_a))
@@ -439,7 +439,7 @@ def build_sparse_active_traversal(
     kernel = hat_delta(fields.balance, config.eta)
     grad_norm = np.linalg.norm(fields.grad_h, axis=-1)
     weights = np.where(active, kernel * grad_norm * fields.grid.cell_volume, 0.0)
-    points = fields.grid.stacked_points()
+    points = fields.grid.stacked_cell_centers()
     law_a = LinearPressureLaw(fields.stiffness_a)
     law_b = LinearPressureLaw(fields.stiffness_b)
 
@@ -496,7 +496,7 @@ def _linearized_sample_at_offset(
     i, j, k = idx
     offset_world = np.asarray(offset_world, dtype=float)
 
-    point = fields.grid.point(i, j, k) + offset_world
+    point = fields.grid.cell_center_point(i, j, k) + offset_world
     grad_h = np.asarray(fields.grad_h[i, j, k], dtype=float)
     grad_norm = float(np.linalg.norm(grad_h))
     normal = _safe_unit(grad_h)
@@ -515,7 +515,7 @@ def _linearized_sample_at_offset(
 
     overlap = depth_a + depth_b
     projected_point = _project_to_balance_surface(point, balance, grad_h)
-    projected_offset = projected_point - fields.grid.point(i, j, k)
+    projected_offset = projected_point - fields.grid.cell_center_point(i, j, k)
     depth_a_projected = _clip_depth(base_depth_a + float(np.dot(fields.grad_depth_a[i, j, k], projected_offset)), fields.max_depth_a)
     depth_b_projected = _clip_depth(base_depth_b + float(np.dot(fields.grad_depth_b[i, j, k], projected_offset)), fields.max_depth_b)
     projected_overlap = depth_a_projected + depth_b_projected
@@ -631,7 +631,7 @@ def accumulate_sdf_native_band_wrench(
     weights = np.where(active, weights, 0.0)
 
     force_density = fields.pressure_common[..., None] * weights[..., None] * normal
-    points = fields.grid.stacked_points()
+    points = fields.grid.stacked_cell_centers()
     lever = points - reference
     torque_density = np.cross(lever, force_density)
 

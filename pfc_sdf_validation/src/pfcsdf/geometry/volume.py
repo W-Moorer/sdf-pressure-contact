@@ -47,17 +47,43 @@ class UniformGrid3D:
         return self.origin[2] + self.spacing[2] * np.arange(self.shape[2], dtype=float)
 
     @property
+    def cell_center_origin(self) -> ArrayLike:
+        return self.origin + 0.5 * self.spacing
+
+    @property
+    def x_cell_centers(self) -> ArrayLike:
+        return self.cell_center_origin[0] + self.spacing[0] * np.arange(self.shape[0], dtype=float)
+
+    @property
+    def y_cell_centers(self) -> ArrayLike:
+        return self.cell_center_origin[1] + self.spacing[1] * np.arange(self.shape[1], dtype=float)
+
+    @property
+    def z_cell_centers(self) -> ArrayLike:
+        return self.cell_center_origin[2] + self.spacing[2] * np.arange(self.shape[2], dtype=float)
+
+    @property
     def cell_volume(self) -> float:
         return float(np.prod(self.spacing))
 
     def point(self, i: int, j: int, k: int) -> ArrayLike:
         return self.origin + self.spacing * np.array([i, j, k], dtype=float)
 
+    def cell_center_point(self, i: int, j: int, k: int) -> ArrayLike:
+        return self.cell_center_origin + self.spacing * np.array([i, j, k], dtype=float)
+
     def mesh_coordinates(self) -> tuple[ArrayLike, ArrayLike, ArrayLike]:
         return np.meshgrid(self.x_coords, self.y_coords, self.z_coords, indexing="ij")
 
+    def cell_center_mesh_coordinates(self) -> tuple[ArrayLike, ArrayLike, ArrayLike]:
+        return np.meshgrid(self.x_cell_centers, self.y_cell_centers, self.z_cell_centers, indexing="ij")
+
     def stacked_points(self) -> ArrayLike:
         x, y, z = self.mesh_coordinates()
+        return np.stack([x, y, z], axis=-1)
+
+    def stacked_cell_centers(self) -> ArrayLike:
+        x, y, z = self.cell_center_mesh_coordinates()
         return np.stack([x, y, z], axis=-1)
 
 

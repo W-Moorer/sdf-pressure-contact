@@ -1,0 +1,14 @@
+\begin{table}
+\caption{continuity-aware sparse traversal 的效率收益}
+\label{tab:efficiency_continuity}
+\resizebox{\linewidth}{!}{%
+\begin{tabular}{llllllllll}
+\toprule
+Variant & Scheme & Runtime (s) & Force error & Impulse error & Energy drift & Mean candidate cells & Mean recompute cells & Mean pred./corr. Jaccard & Mean substeps \\
+\midrule
+Dense baseline & + work consistency & 3.928188 & 0 & 0.007236 & -0.0048 & 203.636364 & 203.636364 & 0.9 & 1 \\
+Continuity-aware & + work consistency & 4.114752 & 0 & 0.007236 & -0.0048 & 116.363636 & 101.818182 & 0.933333 & 1 \\
+\bottomrule
+\end{tabular}%
+}
+\end{table}

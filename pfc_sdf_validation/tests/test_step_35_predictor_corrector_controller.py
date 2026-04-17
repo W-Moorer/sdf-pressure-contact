@@ -47,7 +47,7 @@ def _build_native_model() -> NativeBandFlatContactModel:
     area_side_stiffness = 200.0
     return NativeBandFlatContactModel(
         mass=1.0,
-        grid=UniformGrid3D(origin=np.array([-0.4, -0.4, -0.1]), spacing=np.array([0.2, 0.2, 0.01]), shape=(5, 5, 21)),
+        grid=UniformGrid3D(origin=np.array([-0.4, -0.4, -0.1]), spacing=np.array([0.2, 0.2, 0.01]), shape=(4, 4, 20)),
         footprint=BoxFootprint(0.8, 0.8),
         law_a=LinearPressureLaw(area_side_stiffness),
         law_b=LinearPressureLaw(area_side_stiffness),
