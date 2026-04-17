@@ -5,8 +5,10 @@ from .base import (
     SignedDistanceGeometry,
     signed_distance_gradient,
 )
+from .grid_sdf import GridSDFGeometry
 from .polygon import ConvexPolygon2D, HalfSpace2D, clip_convex_polygon_with_halfspace
 from .primitives import BoxFootprint, PlaneSDF, SphereSDF
+from .transforms import TransformedGeometry
 
 __all__ = [
     "BoundingBox",
@@ -14,6 +16,8 @@ __all__ = [
     "DifferentiableSignedDistanceGeometry",
     "BoundedSignedDistanceGeometry",
     "signed_distance_gradient",
+    "TransformedGeometry",
+    "GridSDFGeometry",
     "PlaneSDF",
     "SphereSDF",
     "BoxFootprint",
