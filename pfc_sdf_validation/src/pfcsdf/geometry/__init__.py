@@ -6,6 +6,9 @@ from .base import (
     signed_distance_gradient,
 )
 from .grid_sdf import GridSDFGeometry
+from .mesh_io import TriangleMesh, load_obj_triangle_mesh
+from .mesh_preprocess import MeshValidationReport, inspect_triangle_mesh, triangle_mesh_aabb, validate_triangle_mesh
+from .mesh_sdf import MeshGridSDFBuildResult, build_mesh_grid_sdf, mesh_signed_distance, mesh_to_grid_sdf
 from .polygon import ConvexPolygon2D, HalfSpace2D, clip_convex_polygon_with_halfspace
 from .primitives import BoxFootprint, PlaneSDF, SphereSDF
 from .transforms import TransformedGeometry
@@ -18,6 +21,16 @@ __all__ = [
     "signed_distance_gradient",
     "TransformedGeometry",
     "GridSDFGeometry",
+    "TriangleMesh",
+    "load_obj_triangle_mesh",
+    "MeshValidationReport",
+    "inspect_triangle_mesh",
+    "triangle_mesh_aabb",
+    "validate_triangle_mesh",
+    "MeshGridSDFBuildResult",
+    "mesh_signed_distance",
+    "mesh_to_grid_sdf",
+    "build_mesh_grid_sdf",
     "PlaneSDF",
     "SphereSDF",
     "BoxFootprint",
