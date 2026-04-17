@@ -1,0 +1,16 @@
+\begin{table}[H]
+\caption{6-DoF complex benchmark 的效率与 controller 统计。}
+\label{tab:complex6dof_efficiency}
+\resizebox{\linewidth}{!}{%
+\begin{tabular}{lllrrrrrrr}
+\toprule
+Variant & Continuity & Controller & Runtime (s) & Mean substeps & Trigger rate & Mean candidate cells & Mean recompute cells & Mean mismatch frac. & Mean continuity Jaccard \\
+\midrule
+Full 6-DoF method & on & on & 14.7049 & 44.6087 & 0.956522 & 27723.3 & 22525 & 0.0711573 & 0.998701 \\
+w/o rigid-motion-aware continuity & off & on & 15.2099 & 44.4348 & 0.956522 & 27837.3 & 22733.7 & 0.059875 & 0.997398 \\
+w/o wrench-aware controller & on & off & 0.126439 & 1 & 0 & 546.609 & 467 & 0.0562688 & 0.943731 \\
+w/o continuity + controller & off & off & 0.122411 & 1 & 0 & 599.87 & 531.217 & 0.0346045 & 0.965395 \\
+\bottomrule
+\end{tabular}%
+}
+\end{table}

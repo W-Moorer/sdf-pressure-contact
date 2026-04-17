@@ -1,6 +1,0 @@
-numpy
-trimesh
-shapely
-scikit-image
-matplotlib
-pandas

@@ -1,0 +1,9 @@
+\contentsline {section}{\numberline {1}引言}{2}{section.1}%
+\contentsline {section}{\numberline {2}方法主线与 Sprint 1 工程闭环}{2}{section.2}%
+\contentsline {section}{\numberline {3}实验设置}{3}{section.3}%
+\contentsline {section}{\numberline {4}结果与分析}{3}{section.4}%
+\contentsline {subsection}{\numberline {4.1}长时程动力学主表}{3}{subsection.4.1}%
+\contentsline {subsection}{\numberline {4.2}效率表：continuity 与 consistent traction 的作用分工}{4}{subsection.4.2}%
+\contentsline {subsection}{\numberline {4.3}正文主图}{4}{subsection.4.3}%
+\contentsline {subsection}{\numberline {4.4}目前可以成立的结论与边界}{7}{subsection.4.4}%
+\contentsline {section}{\numberline {5}结论与展望}{8}{section.5}%

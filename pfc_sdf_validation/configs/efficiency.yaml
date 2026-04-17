@@ -1,0 +1,36 @@
+output_root: results
+native_band_flat:
+  initial_gap: 0.05
+  initial_velocity: -1.0
+  mass: 1.0
+  contact_stiffness: 64.0
+  t_final: 0.55
+  dt: 0.06
+  continuity_scheme: event_aware_midpoint_work_consistent
+  continuity_scheme_display: + work consistency
+  traction_scheme: event_aware_midpoint_work_consistent
+  controller:
+    max_depth: 0
+    work_mismatch_relative_tol: 0.05
+  model:
+    mass: 1.0
+    law_a_stiffness: 200.0
+    law_b_stiffness: 200.0
+    max_depth_a: 0.2
+    max_depth_b: 0.2
+    band:
+      eta: 8.0
+      band_half_width: 12.0
+    grid:
+      origin: [-0.4, -0.4, -0.1]
+      spacing: [0.2, 0.2, 0.01]
+      shape: [5, 5, 21]
+    footprint:
+      width: 0.8
+      height: 0.8
+    continuity:
+      use_warm_start: true
+      boundary_only_update: true
+      dilation_radius: 1
+    traction:
+      consistent_reconstruction: true

@@ -1,5 +1,0 @@
-case,reference_mode,evaluator,x,y,body_force_x,body_force_y,horizontal_to_vertical_ratio,elapsed_s,num_pair_patch_points
-offaxis_reference_center_sensitivity,origin_reference,baseline_default,0.04,0.09,-6.505213034913027e-17,2.8436344162349863,2.2876404216284682e-17,0.027040048999992905,112
-offaxis_reference_center_sensitivity,origin_reference,polygon_default,0.04,0.09,-4.653424561771723e-06,2.859743768162342,1.6272173100186495e-06,0.023967583000001014,90
-offaxis_reference_center_sensitivity,aligned_reference,baseline_default,0.04,0.09,-6.505213034913027e-17,2.8436344162349863,2.2876404216284682e-17,0.027642705999994632,112
-offaxis_reference_center_sensitivity,aligned_reference,polygon_default,0.04,0.09,-4.653424561771723e-06,2.859743768162342,1.6272173100186495e-06,0.02285394500000848,90

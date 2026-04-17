@@ -1,0 +1,3 @@
+variant,scheme_display,runtime_seconds,force_error,impulse_error,state_error,energy_drift,mean_candidate_count,mean_recompute_count,mean_predictor_corrector_jaccard,mean_substeps,max_used_substeps,final_force
+Dense baseline,+ work consistency,5.865233815000465,0.0,0.03033233562225657,0.18338001760785097,0.006025884278398119,286.3636363636364,286.3636363636364,0.7476190476190476,1.0,1,0.0
+Continuity-aware,+ work consistency,5.409422730000188,0.0,0.03033233562225657,0.18338001760785097,0.006025884278398119,122.72727272727273,106.81818181818181,0.86,1.0,1,0.0

@@ -1,0 +1,2 @@
+position_rms,orientation_rms,force_rms,torque_rms,peak_force_error,peak_torque_error,release_timing_error,mean_component_count_error
+5.929316248804382e-06,0.00048373808546858755,2.151815736218626,0.1268668526997551,0.00011441462219919475,0.0017486832637201616,0.0,0.0

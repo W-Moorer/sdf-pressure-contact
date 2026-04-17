@@ -1,4 +1,0 @@
-benchmark,variant,mean_rel_err_Fy,max_rel_err_Fy,mean_total_sheet_area,mean_prior_support_area,rel_err_delta_max,max_rel_err_static_force_law_first_cycle,mean_rel_err_static_force_law_first_cycle,rel_err_release_speed,release_energy_drift_rel_drop_scale
-static_flat_punch_low_res,area_prior_off,0.26654781366739416,0.2758019221646873,0.022021875000000014,0.030000000000000006,,,,,
-static_flat_punch_low_res,area_prior_on,0.0032812841296031236,0.013438123000000062,0.030000000000000006,0.030000000000000006,,,,,
-free_flat_punch_rerun,area_prior_on,,,,,0.2024989494716148,0.2768922207517343,0.2669449391297335,0.0256863181888466,-0.0214661397531163

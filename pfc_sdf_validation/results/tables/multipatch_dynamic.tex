@@ -1,0 +1,14 @@
+\begin{table}[H]
+\caption{多 patch 动态接触基准}
+\label{tab:multipatch_dynamic}
+\resizebox{\linewidth}{!}{%
+\begin{tabular}{lllllllllll}
+\toprule
+Model & Scheme & Force error & Impulse error & Energy drift & Release timing error & Active component error & Mean active components & Max active components & Mean pred./corr. Jaccard & Mean mismatch fraction \\
+\midrule
+analytic\_multipatch & event\_aware\_midpoint\_work\_consistent & 0.004126 & 0.007937 & 0.009755 & 0.002807 & 0 & 1.714286 & 2 & -- & -- \\
+native\_band\_multipatch & event\_aware\_midpoint\_work\_consistent & 0.249938 & 0.153464 & 0.186517 & 0.007301 & 0 & 2 & 2 & 0.717857 & 0.282143 \\
+\bottomrule
+\end{tabular}%
+}
+\end{table}

@@ -1,0 +1,16 @@
+\begin{table}[H]
+\caption{6-DoF complex benchmark 相对高分辨率参考轨迹的对比。}
+\label{tab:complex6dof_reference_comparison}
+\resizebox{\linewidth}{!}{%
+\begin{tabular}{llrrrrrrrrrr}
+\toprule
+Variant & Reference & dt & Reference dt & Runtime (s) & Position RMS & Orientation RMS & Force RMS & Torque RMS & Peak force err. & Peak torque err. & Release timing err. \\
+\midrule
+Full 6-DoF method & High-res same scheme & 0.01 & 0.001 & 14.7049 & 9.11217e-06 & 0.000156867 & 0.687649 & 0.054495 & 0.000113899 & 0.000722268 & 0 \\
+w/o rigid-motion-aware continuity & High-res same scheme & 0.01 & 0.001 & 15.2099 & 0.000321067 & 0.000153441 & 2.42968 & 0.194873 & 0.00449414 & 0.0052939 & 0 \\
+w/o wrench-aware controller & High-res same scheme & 0.01 & 0.001 & 0.126439 & 0.00109854 & 0.0224863 & 4.9786 & 0.34279 & 0.124937 & 0.0622689 & 0 \\
+w/o continuity + controller & High-res same scheme & 0.01 & 0.001 & 0.122411 & 0.00104311 & 0.0219317 & 4.52192 & 0.235502 & 0.142326 & 0.119019 & 0 \\
+\bottomrule
+\end{tabular}%
+}
+\end{table}
