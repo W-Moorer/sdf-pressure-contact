@@ -1,5 +1,12 @@
-
 from __future__ import annotations
+
+"""Benchmark-specific complex-body helpers.
+
+These 2D signed-distance samplers use scalar ``(x, z)`` queries to build support profiles for
+the paper benchmarks. They are intentionally kept separate from the shared 3D
+``SignedDistanceGeometry`` contract in ``pfcsdf.geometry.base`` so this refactor does not force
+an awkward abstraction onto the specialized profile/cloud benchmark path.
+"""
 
 from dataclasses import dataclass
 import math

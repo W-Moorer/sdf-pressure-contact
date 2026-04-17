@@ -5,6 +5,7 @@ from typing import Callable
 
 import numpy as np
 
+from pfcsdf.geometry.base import SignedDistanceGeometry
 from pfcsdf.physics.depth import depth_from_phi
 
 ArrayLike = np.ndarray
@@ -97,14 +98,16 @@ def narrow_band_mask(field: SampledScalarField3D, half_width: float) -> ArrayLik
 
 def sample_linear_balance_field_from_sdfs(
     grid: UniformGrid3D,
-    sdf_a,
-    sdf_b,
+    sdf_a: SignedDistanceGeometry,
+    sdf_b: SignedDistanceGeometry,
     *,
     stiffness_a: float,
     stiffness_b: float,
     max_depth_a: float,
     max_depth_b: float,
 ) -> SampledBalanceField3D:
+    """Sample a linear pressure-balance field from two 3D signed-distance geometries."""
+
     if stiffness_a <= 0.0 or stiffness_b <= 0.0:
         raise ValueError("stiffnesses must be positive")
 

@@ -3,6 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 import numpy as np
 
+from .base import BoundingBox
+
 ArrayLike = np.ndarray
 
 
@@ -51,6 +53,10 @@ class SphereSDF:
         if norm <= 1e-14:
             raise ValueError("Gradient undefined at sphere center.")
         return r / norm
+
+    def bounding_box(self) -> BoundingBox:
+        extent = np.full(3, self.radius, dtype=float)
+        return BoundingBox(minimum=self.center - extent, maximum=self.center + extent)
 
 
 @dataclass(frozen=True)

@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any
 
 import numpy as np
 
@@ -9,26 +8,12 @@ from pfcsdf.contact.active_set import ActiveSetSnapshot, ActiveSetUpdatePlan, co
 from pfcsdf.contact.band import hat_delta
 from pfcsdf.contact.local_normal import solve_column_equilibrium
 from pfcsdf.contact.wrench import PairWrench
+from pfcsdf.geometry.base import SignedDistanceGeometry, signed_distance_gradient
 from pfcsdf.geometry.volume import UniformGrid3D
 from pfcsdf.physics.depth import depth_from_phi
 from pfcsdf.physics.pressure import LinearPressureLaw
 
 ArrayLike = np.ndarray
-
-
-def _sdf_gradient(sdf: Any, point: ArrayLike, eps: float = 1e-6) -> ArrayLike:
-    if hasattr(sdf, "gradient"):
-        return np.asarray(sdf.gradient(point), dtype=float)
-
-    point = np.asarray(point, dtype=float)
-    grad = np.zeros(3, dtype=float)
-    for axis in range(3):
-        step = np.zeros(3, dtype=float)
-        step[axis] = eps
-        plus = float(sdf.signed_distance(point + step))
-        minus = float(sdf.signed_distance(point - step))
-        grad[axis] = (plus - minus) / (2.0 * eps)
-    return grad
 
 
 def _depth_gradient(phi: float, phi_grad: ArrayLike, max_depth: float) -> ArrayLike:
@@ -300,14 +285,16 @@ class HigherOrderSparseNativeBandWrenchResult(NativeBandWrenchResult):
 
 def sample_linear_pfc_balance_fields(
     grid: UniformGrid3D,
-    sdf_a: Any,
-    sdf_b: Any,
+    sdf_a: SignedDistanceGeometry,
+    sdf_b: SignedDistanceGeometry,
     law_a: LinearPressureLaw,
     law_b: LinearPressureLaw,
     *,
     max_depth_a: float,
     max_depth_b: float,
 ) -> SampledPFCBalanceFields:
+    """Sample depth, pressure, and balance fields from two 3D signed-distance geometries."""
+
     shape = grid.shape
     depth_a = np.zeros(shape, dtype=float)
     depth_b = np.zeros(shape, dtype=float)
@@ -331,8 +318,8 @@ def sample_linear_pfc_balance_fields(
                 d_b = float(depth_from_phi(phi_b, max_depth_b))
                 p_a = float(law_a.pressure(d_a))
                 p_b = float(law_b.pressure(d_b))
-                grad_phi_a = _sdf_gradient(sdf_a, x)
-                grad_phi_b = _sdf_gradient(sdf_b, x)
+                grad_phi_a = signed_distance_gradient(sdf_a, x)
+                grad_phi_b = signed_distance_gradient(sdf_b, x)
                 g_d_a = _depth_gradient(phi_a, grad_phi_a, max_depth_a)
                 g_d_b = _depth_gradient(phi_b, grad_phi_b, max_depth_b)
                 g_p_a = law_a.stiffness * g_d_a
