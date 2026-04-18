@@ -1,0 +1,14 @@
+\begin{table}[H]
+\caption{偏心 flat 基准中的 wrench 准确性}
+\label{tab:eccentric_flat}
+\resizebox{\linewidth}{!}{%
+\begin{tabular}{lllllllll}
+\toprule
+Model & Scheme & Force error & Torque error & Peak torque error & Application point error & Impulse error & Energy drift & Release timing error \\
+\midrule
+analytic\_eccentric & event\_aware\_midpoint\_work\_consistent & 0.004126 & 0 & 0 & 0 & 0.007937 & 0.009755 & 0.002807 \\
+native\_band\_eccentric & event\_aware\_midpoint\_work\_consistent & 0.134046 & 0.4375 & 0.4375 & 0.05 & 0.052509 & 0.036002 & 0.007301 \\
+\bottomrule
+\end{tabular}%
+}
+\end{table}

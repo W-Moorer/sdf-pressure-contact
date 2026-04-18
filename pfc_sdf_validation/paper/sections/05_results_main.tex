@@ -1,0 +1,72 @@
+\section{Main Results}
+\subsection{长时程动力学主表}
+\input{tables/main_ablation.tex}
+
+这张主表说明了三件事。第一，在 \textbf{analytic flat} 中，work-consistent 版本在 peak force、release timing 与 energy drift 上整体最稳。第二，在 \textbf{analytic sphere} 中，同样观察到 work-consistent 对 peak、release 与 energy drift 的稳定改善，说明该改进并不依赖平面接触特例。第三，在 \textbf{native-band flat} 中，时间一致性的收益仍然最突出：impulse correction 主要改善冲量，work consistency 则进一步改善 release 阶段与能量一致性；consistent traction reconstruction 在默认长时程口径下更像补充改进，而不是主导收益来源。
+
+\subsection{效率表：continuity 与 consistent traction 的作用分工}
+\input{tables/efficiency_continuity.tex}
+\input{tables/efficiency_traction.tex}
+
+continuity 与 consistent traction 在当前框架中的作用分工是清楚的：前者首先显著降低 active-region 更新代价，后者在几乎不增加 traversal 成本的前提下提升单元内 traction 的一致性。两者共同说明，本文路线并不是只在精度维度做文章，而是在同一通用框架下同时处理了精度与效率。
+
+\subsection{正文主图}
+图~\ref{fig:flat_force} 和图~\ref{fig:sphere_force} 分别展示了面积主导与曲率主导场景下的长时程力曲线。二者共同说明：随着时间一致性改进链逐步加入，峰值附近与释放阶段的曲线逐渐贴近参考历史，而不再只是 onset 附近的小范围改进。
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.82\linewidth]{flat_force_time.pdf}
+    \caption{Analytic flat 长时程 force-time 曲线。}
+    \label{fig:flat_force}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.82\linewidth]{sphere_force_time.pdf}
+    \caption{Analytic sphere 长时程 force-time 曲线。}
+    \label{fig:sphere_force}
+\end{figure}
+
+图~\ref{fig:flat_energy} 进一步表明，work-consistent accepted step 主要针对的并不是单一时刻的力峰值，而是整段接触过程的做功一致性与能量漂移；这正是其在主表中对 energy drift 和 release timing 产生稳定收益的原因。
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.82\linewidth]{flat_energy_time.pdf}
+    \caption{Analytic flat 长时程 total-energy 曲线。}
+    \label{fig:flat_energy}
+\end{figure}
+
+对于 native-band 主链，图~\ref{fig:native_force}、图~\ref{fig:native_active} 与图~\ref{fig:native_controller} 说明了两点：其一，虽然当前 strongest evidence 仍主要来自解析 benchmark，但 native-band 长时程曲线已经足以说明主链是连贯可运行的；其二，continuity/controller 的价值不是停留在“存在”，而是可量化地体现在 active measure 演化、mismatch 信号与 traversal 成本上。
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.82\linewidth]{native_band_force_time.pdf}
+    \caption{Native-band flat 长时程 force-time 曲线。}
+    \label{fig:native_force}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.82\linewidth]{native_band_active_measure_time.pdf}
+    \caption{Native-band flat 的 active-measure 演化。}
+    \label{fig:native_active}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.82\linewidth]{native_band_controller_statistics.pdf}
+    \caption{Native-band flat 的 controller 统计量：predictor/corrector mismatch、work mismatch 与 force jump。}
+    \label{fig:native_controller}
+\end{figure}
+
+
+\subsection{复杂动态场景外推：6-DoF complex benchmark}
+为进一步验证本文方法对\textbf{复杂动态场景外推}而不仅仅是平面或低维运动情形的适用性，我们补充了一组 6-DoF complex rigid-body benchmark。该算例同时包含非对称复合几何、分布式法向接触 wrench、平动--转动耦合、刚体运动感知的 active-set continuity transport，以及 wrench-aware 的事件控制器。与前文三个长时程 benchmark 不同，这一组实验的重点不再只是标量法向力或释放时刻，而是检验同一套 SDF-native 主链在姿态演化、力矩精度和接触拓扑传递上的稳定性。
+
+\input{tables/complex6dof_ablation.tex}
+
+表~\ref{tab:complex6dof_ablation} 说明，在相对于高分辨率参考轨迹的比较中，完整方法达到 $9.112\times 10^{-6}$ 的位置 RMS 误差、$1.569\times 10^{-4}$ 的姿态 RMS 误差、$6.876\times 10^{-1}$ 的 force RMS 误差和 $5.449\times 10^{-2}$ 的 torque RMS 误差，同时保持 \textbf{0} 的 release-timing error 和 \textbf{0} 的平均 active-component-count error。去掉 wrench-aware controller 后，force RMS 从 $6.876\times 10^{-1}$ 恶化到 $4.979$，orientation RMS 从 $1.569\times 10^{-4}$ 恶化到 $2.249\times 10^{-2}$，说明在耦合 6-DoF 情形下，自适应的 force/torque/mismatch 驱动子步进是保证精度的关键机制。保持 controller 但移除 rigid-motion-aware continuity 时，force RMS 进一步增至 $2.430$，而平均 active-component-count 误差也从 0 增至 0.08696，表明 continuity 不只是一个效率技巧，也直接影响旋转运动下接触拓扑传递的稳定性。
+
+\input{tables/complex6dof_efficiency.tex}
+
+表~\ref{tab:complex6dof_efficiency} 进一步补全了这组外推证据的工程维度。第一，在关闭 controller 的低成本模式下，rigid-motion-aware continuity 仍能把 mean candidate cells 从 599.87 降到 546.61，把 mean recompute cells 从 531.22 降到 467.00，说明 continuity 在更便宜但更粗糙的 operating mode 下仍然保有明确工程收益。结合前三组长时程 benchmark，这组 6-DoF 结果表明本文关于“复杂动态场景外推证据”的论证已经从平面法向接触进一步扩展到分布式 wrench 与刚体姿态耦合层面；更细的参考轨迹对比整理在下一节。

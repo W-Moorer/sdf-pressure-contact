@@ -1,0 +1,35 @@
+\section{Appendix: Generalization Evidence}
+本附录补充三组证据：偏心 flat benchmark、多 patch/disconnected 动态 benchmark 以及 controller statistics。其目的不是改变正文主结论，而是说明当前框架并不只对法向单 patch 场景有效，而是已经能够在偏心加载、多个活跃接触片以及显式 continuity/controller 统计层面给出可复现的结果。
+
+\subsection{偏心 flat benchmark}
+偏心 flat benchmark 的重点不在于把法向误差进一步做小，而在于证明当前 native-band 主链已经能够输出可比较的 torque 与 application-point 误差，从而把结论从标量法向力推广到 wrench 层面。表~\ref{tab:eccentric_flat} 给出了 analytic eccentric 与 native-band eccentric 两组结果。可以看到，解析模型上的 torque 指标已经较为稳定，而 native-band eccentric 仍然存在明显 torque/application-point 偏差，这一结果恰好说明：当前主瓶颈已经不再是接触建立时刻，而是更一般动态场景下的 traction consistency 与作用点一致性。
+
+\input{tables/eccentric_flat.tex}
+
+\subsection{多 patch / disconnected 动态 benchmark}
+多 patch benchmark 用于检验 continuity/controller 在多个分离接触片场景中的稳定性。表~\ref{tab:multipatch_dynamic} 表明，在 analytic multipatch 场景下，当前 work-consistent 动力学器已经能够稳定跨越完整接触相位；而在 native-band multipatch 场景下，active component 数、predictor/corrector Jaccard 与 mismatch fraction 均已可量化地导出。这里最重要的不是误差绝对值已经最优，而是项目现在已经拥有了一个能够显式度量 split/merge 动态的实验接口。
+
+\input{tables/multipatch_dynamic.tex}
+
+\subsection{Controller 统计量}
+表~\ref{tab:controller_statistics} 总结了当前 controller 在偏心 flat 与 multipatch 场景中的主要统计量，包括 predictor/corrector Jaccard、mismatch fraction、work mismatch、各类 trigger 次数，以及 candidate / recompute cells。它们说明 controller 已经不是黑箱逻辑，而是具有明确可报告行为的统一数值机制。对于后续论文打磨，这一组统计量还可以进一步转化为控制器行为图与附录消融表。
+
+\input{tables/controller_statistics.tex}
+
+\section{Appendix: Reference Comparisons and Sensitivity}
+本节的目标是补强两类审稿人最关心的问题：第一，native-band 主链与 reference 之间的差距究竟有多大；第二，当前结果是否依赖某组 magic parameter。相应地，本附录给出 reference comparison 与 sensitivity suites 两套自动生成表。
+
+\subsection{参考解对比}
+表~\ref{tab:reference_comparison} 把当前默认工作流与三类 reference 放在同一个框架下比较：analytic flat 对 exact analytic 和 high-resolution same-scheme，analytic sphere 对 RK4 reference 和 high-resolution same-scheme，native-band flat 对 analytic flat exact 和 high-resolution native-band。该表支持一个重要判断：native-band flat 相对 high-resolution native-band 的误差明显小于其相对 analytic flat exact 的误差，这表明当前可见误差中既包含离散误差，也包含模型层差异；因此，后续工作既需要继续改善时间/空间离散，也需要更谨慎地区分“数值逼近误差”和“主链与解析模型之间的物理差异”。
+
+\noindent\textit{For all native-band experiments in this paper, native-band now uses cell-centered volumetric sampling and cell-centered footprint support masking.}
+
+\input{tables/reference_comparison.tex}
+
+\subsection{参数敏感性分析}
+表~\ref{tab:sensitivity} 扫描了 grid spacing、band half width、$\eta$、work-mismatch tolerance、continuity 开关以及 consistent traction reconstruction 开关。当前结果说明：continuity 的主要收益体现在 candidate/recompute 数量下降，而不是把主误差“调小”；与此同时，$z$ 向分辨率、band 宽度与 $\eta$ 的变化会系统影响 peak force、impulse 和 energy drift。这些现象对论文写作有两个直接意义：一方面，它们足以支撑“结果并非来自单个特调参数”的论点；另一方面，也明确指出 native-band 主链后续最值得继续优化的敏感方向仍是局部窄带离散与 traction consistency。
+
+\input{tables/sensitivity.tex}
+
+\section{附录小结}
+截至当前版本，本文已经在正文主表之外补齐了三类附录证据：其一，偏心 flat 与 multipatch benchmark 将结论从法向力扩展到 wrench 与多接触片动态；其二，controller statistics 使 continuity/controller 机制具备可解释的行为统计；其三，reference comparison 与 sensitivity suites 为 native-band 主链提供了更完整的说服力边界。它们共同说明：当前项目已经不仅能写出一条主结果线，也已经逐步具备高水平论文所要求的附录证据结构。

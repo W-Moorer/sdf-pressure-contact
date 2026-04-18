@@ -1,0 +1,29 @@
+\begin{table}[H]
+\caption{敏感性分析}
+\label{tab:sensitivity}
+\resizebox{\linewidth}{!}{%
+\begin{tabular}{llrllllllll}
+\toprule
+Parameter & Value & Baseline & Peak force error & Impulse error & Energy drift & Release timing error & Runtime (s) & Mean candidate cells & Mean recompute cells & Mean substeps \\
+\midrule
+baseline & default & True & 0.198292 & 0.030332 & 0.006026 & 0.075034 & 6.812135 & 122.727273 & 106.818182 & 1 \\
+grid\_spacing\_z & 0.0200 & False & 0.222404 & 0.035463 & -0.016715 & 0.072853 & 3.518825 & 77.272727 & 77.272727 & 1 \\
+grid\_spacing\_z & 0.0100 & False & 0.198292 & 0.030332 & 0.006026 & 0.075034 & 6.778946 & 122.727273 & 106.818182 & 1 \\
+grid\_spacing\_z & 0.0050 & False & 0.206797 & 0.035773 & 0.012443 & 0.074066 & 11.34986 & 172.727273 & 152.272727 & 1 \\
+band\_half\_width & 8.00 & False & 0.17712 & 0.04189 & 0.009759 & 0.070852 & 5.276463 & 106.818182 & 106.818182 & 1 \\
+band\_half\_width & 12.00 & False & 0.198292 & 0.030332 & 0.006026 & 0.075034 & 6.927674 & 122.727273 & 106.818182 & 1 \\
+band\_half\_width & 16.00 & False & 0.198292 & 0.030332 & 0.006026 & 0.075034 & 6.802415 & 122.727273 & 106.818182 & 1 \\
+eta & 6.00 & False & 0.176774 & 0.038426 & 0.003712 & 0.07341 & 6.484379 & 122.727273 & 106.818182 & 1 \\
+eta & 8.00 & False & 0.198292 & 0.030332 & 0.006026 & 0.075034 & 6.585999 & 122.727273 & 106.818182 & 1 \\
+eta & 10.00 & False & 0.214222 & 0.020924 & 0.003524 & 0.07314 & 6.676618 & 122.727273 & 106.818182 & 1 \\
+work\_mismatch\_relative\_tol & 0.020 & False & 0.198292 & 0.030332 & 0.006026 & 0.075034 & 6.890314 & 122.727273 & 106.818182 & 1 \\
+work\_mismatch\_relative\_tol & 0.050 & False & 0.198292 & 0.030332 & 0.006026 & 0.075034 & 6.655358 & 122.727273 & 106.818182 & 1 \\
+work\_mismatch\_relative\_tol & 0.100 & False & 0.198292 & 0.030332 & 0.006026 & 0.075034 & 6.587981 & 122.727273 & 106.818182 & 1 \\
+continuity\_enabled & False & False & 0.198292 & 0.030332 & 0.006026 & 0.075034 & 7.067634 & 286.363636 & 286.363636 & 1 \\
+continuity\_enabled & True & False & 0.198292 & 0.030332 & 0.006026 & 0.075034 & 6.9068 & 122.727273 & 106.818182 & 1 \\
+consistent\_traction\_reconstruction & False & False & 0.198292 & 0.030332 & 0.006026 & 0.075034 & 7.168637 & 122.727273 & 106.818182 & 1 \\
+consistent\_traction\_reconstruction & True & False & 0.198292 & 0.030332 & 0.006026 & 0.075034 & 7.30704 & 122.727273 & 106.818182 & 1 \\
+\bottomrule
+\end{tabular}%
+}
+\end{table}

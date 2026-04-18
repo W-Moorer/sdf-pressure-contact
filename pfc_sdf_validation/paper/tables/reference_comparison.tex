@@ -1,0 +1,18 @@
+\begin{table}[H]
+\caption{参考解对比实验}
+\label{tab:reference_comparison}
+\resizebox{\linewidth}{!}{%
+\begin{tabular}{llllllllllllll}
+\toprule
+Benchmark & Scheme & Reference & dt & Reference dt & State error & Peak force error & Impulse error & Release timing error & Rebound velocity error & Energy drift & Runtime (s) & Mean candidate cells & Mean recompute cells \\
+\midrule
+Analytic flat & + work consistency & Exact analytic & 0.04 & -- & 0.236853 & 6.591e-04 & 0.008664 & 7.424e-04 & 0.001131 & 0.001132 & 0.00556 & -- & -- \\
+Analytic flat & + work consistency & High-res same scheme & 0.04 & 0.01 & 0.001548 & 0.002362 & 0.010156 & 8.073e-04 & 0.001117 & 0.001132 & 0.00556 & -- & -- \\
+Analytic sphere & + work consistency & RK4 reference & 0.05 & 5.000e-04 & 4.986e-04 & 0.001686 & 0.001966 & 8.206e-04 & 7.514e-05 & -7.514e-05 & 0.031156 & -- & -- \\
+Analytic sphere & + work consistency & High-res same scheme & 0.05 & 0.02 & 6.981e-04 & 0.001303 & 0.001971 & 7.258e-04 & 8.231e-05 & -7.514e-05 & 0.031156 & -- & -- \\
+Native-band flat & + consistent traction reconstruction & Analytic flat exact & 0.06 & -- & 0.18338 & 0.198292 & 0.030332 & 0.075034 & 0.006008 & 0.006026 & 5.983681 & 122.727273 & 106.818182 \\
+Native-band flat & + consistent traction reconstruction & High-res native-band & 0.06 & 0.02 & 0.003462 & 0.061817 & 0.035291 & 0.002051 & 0.003035 & 0.006026 & 5.983681 & 122.727273 & 106.818182 \\
+\bottomrule
+\end{tabular}%
+}
+\end{table}

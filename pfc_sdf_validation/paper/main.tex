@@ -1,0 +1,54 @@
+\documentclass[11pt,a4paper]{ctexart}
+\usepackage[a4paper,margin=2.2cm]{geometry}
+\usepackage{amsmath,amssymb,mathtools,bm}
+\usepackage{booktabs}
+\usepackage{graphicx}
+\usepackage{float}
+\usepackage{enumitem}
+\usepackage{hyperref}
+\usepackage{siunitx}
+\usepackage{xcolor}
+\usepackage{microtype}
+\usepackage{threeparttable}
+\usepackage{longtable}
+\usepackage{placeins}
+
+\hypersetup{
+    colorlinks=true,
+    linkcolor=blue!60!black,
+    urlcolor=blue!60!black,
+    citecolor=blue!60!black
+}
+\setlist[itemize]{leftmargin=2em,itemsep=0.2em,topsep=0.2em}
+\setlist[enumerate]{leftmargin=2.2em,itemsep=0.2em,topsep=0.2em}
+\setlength{\parskip}{0.35em}
+\setlength{\parindent}{2em}
+\graphicspath{{figures/}}
+
+\title{SDF-Native Pressure-Field Contact Dynamics with Cell-Centered Native-Band Sampling}
+\author{TODO: Authors and Affiliations}
+\date{}
+
+\begin{document}
+\maketitle
+
+\input{sections/00_abstract.tex}
+\input{sections/01_intro.tex}
+\input{sections/02_related_work.tex}
+\input{sections/03_method.tex}
+\input{sections/04_benchmarks_and_setup.tex}
+\input{sections/05_results_main.tex}
+\input{sections/06_external_comparison.tex}
+\input{sections/07_discussion_limitations.tex}
+\input{sections/08_conclusion.tex}
+
+\appendix
+\FloatBarrier
+\input{sections/09_appendix.tex}
+
+% TODO: migrate to the SIGGRAPH Asia 2026 official submission template.
+% TODO: integrate bibliography once bib/main.bib is populated.
+%\bibliographystyle{abbrv}
+%\bibliography{bib/main}
+
+\end{document}

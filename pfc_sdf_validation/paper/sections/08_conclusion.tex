@@ -1,0 +1,4 @@
+\section{Conclusion}
+当前稿件已经完成了从研究代码到投稿闭环基础设施的关键过渡。当前项目不仅具备一条完整的 SDF-native PFC 动力学求解主链，而且已经形成统一的长时程 benchmark、效率表、主图和导表脚本，使得论文中的核心结果可以由配置文件和实验脚本一键重现。现阶段最强的证据主线仍然来自 analytic flat、analytic sphere 和 native-band flat 三组 benchmark，而新增的 6-DoF complex benchmark 则把这条证据链进一步扩展到姿态演化、分布式力矩和接触拓扑传递层面。它们共同支持如下阶段性结论：SDF-native 窄带求解可以在不依赖几何特调的前提下构成一条统一的动力学主链，continuity 与时间一致性是该主链中同时决定效率与精度的关键机制。
+
+下一阶段的工作不应再简单堆叠新模块，而应沿两条线继续推进。第一条是 \textbf{通用性证据线}：在已经补入 6-DoF complex benchmark 的基础上，继续扩充偏心 flat、多 patch/disconnected 接触以及更高分辨率 complex-shape 参考实验，进一步支撑“无特调通用框架”的论点。第二条是 \textbf{说服力补强线}：继续完善 reference comparison 与 sensitivity study，让审稿人能更清楚地看到 native-band 主链与高成本 reference 之间的关系，以及结果并非来自某组 magic parameter。换言之，当前稿件的完成并不意味着项目结束，而是意味着项目已经拥有一套足以支撑正式投稿打磨的可复现骨架。

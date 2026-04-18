@@ -1,0 +1,5 @@
+\begin{abstract}
+本文面向一种通用的 SDF-native 压力场接触（PFC）动力学框架，给出当前稿件阶段的完整投稿闭环。与将显式接触面恢复作为默认求解路径的实现不同，本文保留对象固定压力场与等压平衡的物理闭包，同时将默认数值主链改写为基于 signed distance function (SDF) 的窄带/稀疏 active-cell 累加：几何由 SDF 表示，局部压力由深度场驱动，平衡条件由压力差场 $h=p_A-p_B$ 给出，合力与合力矩直接在窄带 active cells 上累计，而不再把 sheet/mesh 重建作为每一步动力学求解的前置条件。围绕这条主链，当前代码进一步实现了 continuity-aware warm start、boundary-only update、predictor/corrector continuity controller、event-aware midpoint、impulse-corrected accepted step、work-consistent accepted step 以及 per-cell consistent traction reconstruction。
+
+本文的当前稿件贡献不再停留在单个 benchmark 或散乱脚本层面，而是形成了可复现、可导表、可导图的实验基础设施。项目现在包含统一的配置文件、主表脚本、效率表脚本、图生成脚本和导表工具，能够一键生成长时程 flat/sphere/native-band 主表、效率表以及论文主图，并进一步补入一组 6-DoF complex benchmark 的正文证据。现有结果支持以下阶段性结论：第一，SDF-native 主链已经完整打通；第二，continuity-aware traversal 在不明显带偏主结果的前提下显著降低了 traversal 成本；第三，时间一致性的两轮改进链（impulse correction 与 work consistency）在长时程 flat/sphere benchmark 中系统改善了冲量、能量与释放阶段的动力学指标；第四，在 6-DoF 复杂刚体接触中，rigid-motion-aware continuity 与 wrench-aware controller 共同支撑了位置/姿态/力/力矩误差的稳定控制。与此同时，本文也保持审慎：尽管当前已经补入一组复杂动态场景外推证据，更一般三维复杂几何上的长时程证据链仍需继续补强。
+\end{abstract}

@@ -1,0 +1,39 @@
+\section{Method}
+当前默认求解主链可概括为
+\begin{equation}
+\begin{aligned}
+\phi_A,\phi_B &\rightarrow d_A,d_B \rightarrow p_A,p_B \rightarrow h=p_A-p_B \\
+&\rightarrow \text{sparse active cells} \rightarrow \text{local-normal corrected traction} \\
+&\rightarrow \text{wrench} \rightarrow \text{event-aware dynamics}.
+\end{aligned}
+\end{equation}
+其中内部深度定义为
+\begin{equation}
+    d_i(x)=\operatorname{clamp}(-\phi_i(x),0,H_i),\qquad i\in\{A,B\},
+\end{equation}
+当前实现采用线性压力律
+\begin{equation}
+    p_i(x)=k_i d_i(x),
+\end{equation}
+平衡条件由压力差场
+\begin{equation}
+    h(x)=p_A(x)-p_B(x)
+\end{equation}
+给出。本文默认主求解器不显式恢复 $h=0$ 的零水平面，而是在窄带 active cells 上直接累计 wrench。
+
+在动力学层面，当前通用控制链包含四个关键机制：
+\begin{itemize}
+    \item \textbf{event-aware midpoint}：以时间中心化方式评估接触，并对 onset/release 做通用事件监控；
+    \item \textbf{continuity-aware traversal}：利用上一步 active snapshot 进行 warm start 与 boundary-only update；
+    \item \textbf{impulse correction}：用 start/mid/end 三时刻力近似单步冲量；
+    \item \textbf{work consistency}：显式检查一步内接触做功与动能变化的一致性，并把 work mismatch 接入 controller。
+\end{itemize}
+
+当前稿件在工程层面的目标不是再发明一个新模块，而是把上述主链整理成可复现实验基础设施。当前工程已经新增：
+\begin{itemize}
+    \item \texttt{experiments/run\_main\_tables.py}：生成长时程主表；
+    \item \texttt{experiments/run\_efficiency\_tables.py}：生成效率表；
+    \item \texttt{experiments/run\_plot\_suite.py}：生成正文主图；
+    \item \texttt{configs/*.yaml}：固定默认 benchmark 与 controller 参数；
+    \item \texttt{src/pfcsdf/reporting/*}：统一导出 CSV、Markdown、LaTeX 表与图形。
+\end{itemize}

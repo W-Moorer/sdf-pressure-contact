@@ -1,0 +1,6 @@
+\section{External Comparison}
+本节把更直接的参考轨迹对比单独整理出来，用于补强 6-DoF complex benchmark 的外部比较口径。这里保留与当前代码实现一致的表述：native-band now uses cell-centered volumetric sampling and cell-centered footprint support masking。
+
+\input{tables/complex6dof_reference_comparison.tex}
+
+表~\ref{tab:complex6dof_reference_comparison} 说明，完整方法相对于高分辨率同 scheme 参考轨迹的 peak force error 与 peak torque error 分别仅为 $1.139\times 10^{-4}$ 和 $7.223\times 10^{-4}$。这表明当前 6-DoF 主链的主要误差已经不再表现为接触释放时刻或拓扑个数的灾难性偏差，而更多集中在连续 force/torque 历史的细部逼近上。更宽口径的解析 reference comparison 与 sensitivity tables 继续保留在附录中。

@@ -1,0 +1,9 @@
+\section{Discussion and Limitations}
+基于当前稿件的代码、主表和图，本文认为以下结论已经可以成立：
+\begin{enumerate}
+    \item \textbf{SDF-native 主链已经打通。} 从 SDF 场构造、窄带 sparse traversal、local-normal correction，到 continuity-aware dynamics 与长时程 benchmark，主链是完整可运行的。
+    \item \textbf{continuity 具有明确工程价值。} 它不仅是 active-set 的记录方式，更是统一动力学控制链中的关键数值机制，已经在不显著损伤主结果的前提下取得 traversal 成本收益；在 6-DoF benchmark 中，这一收益还延伸到了旋转运动下的接触拓扑传递稳定性。
+    \item \textbf{时间一致性改进链是有效的。} 从 event-aware midpoint 到 impulse correction 再到 work consistency，关键长时程指标沿着清晰路线得到改进，并且这种改进在 flat 与 sphere 两类 benchmark 中都能观察到。
+    \item \textbf{复杂动态场景外推证据已经初步建立。} 新增的 6-DoF complex benchmark 表明，同一套 continuity/controller 机制可以在姿态演化、分布式力矩和 active-component transport 同时存在的情形下保持稳定工作，而不是只对低维法向接触有效。
+\end{enumerate}
+同时也必须保持边界：当前 6-DoF 结果已经足以支持“机制可外推、方向正确”的判断，但还不足以宣称通用三维复杂几何上的长时程动力学精度问题已经完全解决；更高分辨率空间离散、更丰富的 complex-shape benchmark 和更系统的 reference study 仍需继续补强。

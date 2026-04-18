@@ -1,0 +1,13 @@
+\section{Introduction}
+接触动力学中始终存在一个张力：高精度几何与力学闭包往往要求复杂的接触面恢复、patch 拓扑维护和高成本 surface quadrature，而高效时间推进又要求每一步的接触求值足够局部、足够稀疏、足够稳定。这个矛盾在 flat large-area contact 中尤为突出：静力与准静力通常可以做得很好，但一旦进入动力学，first-contact、active-region 激活、冲量累计和能量一致性都会放大离散误差。
+
+本文采取的策略不是重新发明一套显式曲面接触算法，而是保留 PFC 的物理主干，将默认数值求解器改造成 \textbf{SDF-native} 的窄带累加器。我们把 marching-cubes、curved-sheet reconstruction 等显式表面重建技术降格为参考链与调试链，而把真正的动力学主链建立在 SDF 所定义的体场之上：由深度场构造压力场，再由压力差场构造平衡条件，最后在窄带 sparse active cells 上直接累计 wrench。围绕这条主链，当前稿件的重点不是继续堆新算法，而是完成一套投稿闭环：统一实验入口、统一配置、统一导表导图、并将长时程 flat/sphere/native-band 结果组织成一条清晰的 ablation 故事。
+
+\noindent\textit{For all native-band experiments in this paper, native-band now uses cell-centered volumetric sampling and cell-centered footprint support masking.}
+
+本文的主要贡献概括为三点：
+\begin{enumerate}
+    \item 提出并实现了一种 \textbf{SDF-native 的 PFC 动力学求解主链}，以窄带/稀疏 active-cell 累加取代显式接触面恢复作为默认路径。
+    \item 构造了一条 \textbf{无几何特调的通用动态一致性机制}，包括 continuity-aware warm start、boundary-only update、predictor/corrector continuity controller、event-aware midpoint、impulse correction 与 work-consistent accepted step。
+    \item 完成了 \textbf{当前稿件投稿闭环}：以统一脚本和配置自动生成长时程主表、效率表与论文主图，并将 6-DoF complex benchmark 的正文消融、效率与参考对比表一并纳入论文证据链，为后续补强偏心 flat、多 patch、reference comparison 与 sensitivity study 打下了可复现基础。
+\end{enumerate}
