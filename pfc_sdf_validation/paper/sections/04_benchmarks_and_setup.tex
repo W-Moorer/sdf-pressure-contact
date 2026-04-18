@@ -1,12 +1,14 @@
 \section{Benchmarks and Setup}
-当前稿件的默认故事线统一采用 \textbf{长时程} 口径，不再只覆盖 onset 附近一小段时间。每个 benchmark 至少跨越 onset、peak compression、release 以及 release 后的一段自由段，使得 peak force、impulse、energy drift 与 rebound velocity 等指标具有真正的解释力。
+当前稿件的主结果统一采用 \textbf{同一个基础时间步长 $\Delta t = 0.01$}。这样做的目的，是避免 analytic flat、analytic sphere 与 native-band flat 分别使用不同采样频率，从而把曲线差异更多地归因于接触模型与积分方案本身，而不是展示口径上的时间离散差异。6-DoF complex benchmark 当前也采用 $\Delta t = 0.01$，因此正文主链与复杂外推证据在时间分辨率上已经保持一致。
 
 正文主线 benchmark 包含三组：
 \begin{itemize}
     \item \textbf{Analytic flat}：面积主导的解析对照组；
     \item \textbf{Analytic sphere}：曲率主导的解析对照组；
-    \item \textbf{Native-band flat}：SDF-native 主链的真实动态 benchmark。
+    \item \textbf{Native-band flat}：SDF-native 主链的长时程动态 benchmark。
 \end{itemize}
-此外，本文再补入一组 \textbf{6-DoF complex rigid-body benchmark}，用于验证方法在非对称复合几何、平动--转动耦合、分布式接触 wrench 以及 active-set 拓扑传递下的外推能力。
+此外，本文继续保留一组 \textbf{6-DoF complex rigid-body benchmark}，用于验证方法在非对称复合几何、平动-转动耦合、分布式接触 wrench 与 active-set continuity transport 下的外推能力。
 
-统一报告的主要指标包括：peak force error、impulse error、energy drift、release timing error、max penetration error 与 rebound velocity error。对于 native-band benchmark，还同时记录 mean candidate cells、mean recompute cells、predictor/corrector Jaccard 等效率与连续性指标；对于 6-DoF benchmark，则进一步报告位置/姿态/力/力矩 RMS 误差、peak wrench 误差以及 active-component-count 误差。
+统一报告的主要指标包括 peak force error、impulse error、energy drift、release timing error、max penetration error 与 rebound velocity error。对于 native-band benchmark，还同时记录 mean candidate cells、mean recompute cells 与 predictor/corrector continuity 指标；对于 6-DoF benchmark，则进一步报告位置、姿态、力与力矩的 RMS 误差，以及 active-component-count 误差。
+
+\noindent\textit{For all native-band experiments in this paper, native-band now uses cell-centered volumetric sampling and cell-centered footprint support masking.}

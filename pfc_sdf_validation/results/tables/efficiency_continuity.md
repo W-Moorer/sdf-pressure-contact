@@ -2,5 +2,5 @@
 
 | Variant          | Scheme             |   Runtime (s) |   Force error |   Impulse error |   Energy drift |   Mean candidate cells |   Mean recompute cells |   Mean pred./corr. Jaccard |   Mean substeps |
 |:-----------------|:-------------------|--------------:|--------------:|----------------:|---------------:|-----------------------:|-----------------------:|---------------------------:|----------------:|
-| Dense baseline   | + work consistency |       3.44972 |             0 |        0.007236 |        -0.0048 |                203.636 |                203.636 |                   0.9      |               1 |
-| Continuity-aware | + work consistency |       3.34343 |             0 |        0.007236 |        -0.0048 |                116.364 |                101.818 |                   0.933333 |               1 |
+| Dense baseline   | + work consistency |       16.7939 |             0 |        0.000916 |       0.001551 |               228.571  |               228.571  |                          1 |               1 |
+| Continuity-aware | + work consistency |       16.8721 |             0 |        0.000916 |       0.001551 |                94.8571 |                78.2857 |                          1 |               1 |

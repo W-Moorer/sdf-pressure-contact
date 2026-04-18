@@ -108,7 +108,7 @@ def build_default_ablation_case_configs() -> list[AblationCaseConfig]:
         contact_stiffness=100.0,
         t_final=0.60,
     )
-    analytic_dt = 0.04
+    analytic_dt = 0.01
 
     native_setup = FlatImpactSetup(
         initial_gap=0.05,
@@ -117,7 +117,7 @@ def build_default_ablation_case_configs() -> list[AblationCaseConfig]:
         contact_stiffness=64.0,
         t_final=0.55,
     )
-    native_dt = 0.05
+    native_dt = 0.01
     native_controller = EventAwareControllerConfig(max_depth=2, work_mismatch_relative_tol=0.05)
 
     sphere_setup = SphereImpactSetup(
@@ -129,7 +129,7 @@ def build_default_ablation_case_configs() -> list[AblationCaseConfig]:
         plane_stiffness=18.0,
         t_final=1.50,
     )
-    sphere_dt = 0.05
+    sphere_dt = 0.01
     sphere_controller = EventAwareControllerConfig(max_depth=4, work_mismatch_relative_tol=0.02)
 
     cases: list[AblationCaseConfig] = []

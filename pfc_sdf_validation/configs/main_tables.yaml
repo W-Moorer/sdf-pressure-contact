@@ -11,7 +11,7 @@ benchmarks:
     mass: 1.0
     contact_stiffness: 100.0
     t_final: 0.60
-    dt: 0.04
+    dt: 0.01
   analytic_sphere:
     initial_gap: 0.05
     initial_velocity: -1.0
@@ -20,7 +20,7 @@ benchmarks:
     sphere_stiffness: 12.0
     plane_stiffness: 18.0
     t_final: 1.50
-    dt: 0.05
+    dt: 0.01
     controller:
       max_depth: 4
       work_mismatch_relative_tol: 0.02
@@ -30,7 +30,7 @@ benchmarks:
     mass: 1.0
     contact_stiffness: 64.0
     t_final: 0.55
-    dt: 0.06
+    dt: 0.01
     controller:
       max_depth: 0
       work_mismatch_relative_tol: 0.05

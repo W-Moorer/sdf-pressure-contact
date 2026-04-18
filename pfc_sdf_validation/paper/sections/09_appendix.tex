@@ -20,14 +20,14 @@
 本节的目标是补强两类审稿人最关心的问题：第一，native-band 主链与 reference 之间的差距究竟有多大；第二，当前结果是否依赖某组 magic parameter。相应地，本附录给出 reference comparison 与 sensitivity suites 两套自动生成表。
 
 \subsection{参考解对比}
-表~\ref{tab:reference_comparison} 把当前默认工作流与三类 reference 放在同一个框架下比较：analytic flat 对 exact analytic 和 high-resolution same-scheme，analytic sphere 对 RK4 reference 和 high-resolution same-scheme，native-band flat 对 analytic flat exact 和 high-resolution native-band。该表支持一个重要判断：native-band flat 相对 high-resolution native-band 的误差明显小于其相对 analytic flat exact 的误差，这表明当前可见误差中既包含离散误差，也包含模型层差异；因此，后续工作既需要继续改善时间/空间离散，也需要更谨慎地区分“数值逼近误差”和“主链与解析模型之间的物理差异”。
+表~\ref{tab:reference_comparison} 把当前统一采用 $\Delta t = 0.01$ 的默认工作流与三类 reference 放在同一个框架下比较：analytic flat 对 exact analytic 和 high-resolution same-scheme，analytic sphere 对 RK4 reference 和 high-resolution same-scheme，native-band flat 对 analytic flat exact 和 high-resolution native-band。该表支持一个重要判断：native-band flat 相对 high-resolution native-band 的误差仍明显小于其相对 analytic flat exact 的误差，这表明当前可见误差中既包含离散误差，也包含模型层差异；因此，后续工作既需要继续改善时间/空间离散，也需要更谨慎地区分“数值逼近误差”和“主链与解析模型之间的物理差异”。
 
 \noindent\textit{For all native-band experiments in this paper, native-band now uses cell-centered volumetric sampling and cell-centered footprint support masking.}
 
 \input{tables/reference_comparison.tex}
 
 \subsection{参数敏感性分析}
-表~\ref{tab:sensitivity} 扫描了 grid spacing、band half width、$\eta$、work-mismatch tolerance、continuity 开关以及 consistent traction reconstruction 开关。当前结果说明：continuity 的主要收益体现在 candidate/recompute 数量下降，而不是把主误差“调小”；与此同时，$z$ 向分辨率、band 宽度与 $\eta$ 的变化会系统影响 peak force、impulse 和 energy drift。这些现象对论文写作有两个直接意义：一方面，它们足以支撑“结果并非来自单个特调参数”的论点；另一方面，也明确指出 native-band 主链后续最值得继续优化的敏感方向仍是局部窄带离散与 traction consistency。
+表~\ref{tab:sensitivity} 现已按统一 $\Delta t = 0.01$ 重新扫描 grid spacing、band half width、$\eta$、work-mismatch tolerance、continuity 开关以及 consistent traction reconstruction 开关。新的结果更具体地表明：continuity 的主要收益仍然体现在 candidate/recompute 数量下降，而不是把主误差“调小”；$z$ 向分辨率则依然是最敏感的离散方向，其中 $0.005$ 的更细采样在当前窄带配置下反而显著放大了 peak force、impulse 与 energy drift；$\eta$ 的变化也会系统影响主误差；相比之下，band half width 在当前默认设置附近主要改变的是计算开销，而不是标量误差本身。与此同时，由于当前默认 controller 仍采用 \texttt{max\_depth=0}，work-mismatch tolerance 在这组 sensitivity 中几乎不产生可见差异。这些现象对论文写作有两个直接意义：一方面，它们足以支撑“结果并非来自单个特调参数”的论点；另一方面，也更明确地指出 native-band 主链后续最值得继续优化的敏感方向是局部窄带离散与参数稳健性，而不只是继续堆叠新修正模块。
 
 \input{tables/sensitivity.tex}
 

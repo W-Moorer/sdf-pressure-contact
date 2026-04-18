@@ -276,6 +276,132 @@ def generate_efficiency_outputs(config: dict[str, Any], *, output_root: str | Pa
     }
 
 
+def generate_sensitivity_outputs(config: dict[str, Any], *, output_root: str | Path | None = None) -> dict[str, Path]:
+    out_root = ROOT if output_root is None else Path(output_root)
+    results_dir = out_root / config.get('output_root', 'results')
+    tables_dir = results_dir / 'tables'
+    cfg = config['benchmarks']['native_band_flat']
+    setup = FlatImpactSetup(
+        initial_gap=float(cfg['initial_gap']),
+        initial_velocity=float(cfg['initial_velocity']),
+        mass=float(cfg['mass']),
+        contact_stiffness=float(cfg['contact_stiffness']),
+        t_final=float(cfg['t_final']),
+    )
+    scheme = 'event_aware_midpoint_work_consistent'
+    default_dt = float(cfg['dt'])
+    default_controller_cfg = dict(cfg.get('controller', {}))
+    default_model_cfg = dict(cfg['model'])
+
+    def run_case(
+        *,
+        parameter: str,
+        value: str,
+        baseline: bool,
+        model_cfg: dict[str, Any] | None = None,
+        controller_cfg: dict[str, Any] | None = None,
+        continuity_enabled: bool | None = None,
+        boundary_only: bool | None = None,
+        consistent_traction: bool | None = None,
+    ) -> dict[str, Any]:
+        local_model_cfg = default_model_cfg if model_cfg is None else model_cfg
+        controller = _controller_from_cfg(default_controller_cfg if controller_cfg is None else controller_cfg)
+        model = _native_model_from_cfg(
+            local_model_cfg,
+            continuity_enabled=continuity_enabled,
+            boundary_only=boundary_only,
+            consistent_traction=consistent_traction,
+        )
+        start = perf_counter()
+        hist = run_flat_impact_benchmark(setup, dt=default_dt, scheme=scheme, model=model, controller=controller)
+        runtime = perf_counter() - start
+        err = benchmark_flat_impact_error(setup, hist)
+        return {
+            'Parameter': parameter,
+            'Value': value,
+            'Baseline': baseline,
+            'Peak force error': err.peak_force_error,
+            'Impulse error': err.impulse_error,
+            'Energy drift': hist.energy_drift,
+            'Release timing error': err.release_timing_error,
+            'Runtime (s)': runtime,
+            'Mean candidate cells': float(np.nanmean(hist.candidate_count)),
+            'Mean recompute cells': float(np.nanmean(hist.recompute_count)),
+            'Mean substeps': float(np.mean(hist.used_substeps)),
+        }
+
+    rows: list[dict[str, Any]] = []
+    rows.append(run_case(parameter='baseline', value='default', baseline=True))
+
+    for spacing_z in [0.02, 0.01, 0.005]:
+        model_cfg = dict(default_model_cfg)
+        grid_cfg = dict(default_model_cfg['grid'])
+        spacing = list(grid_cfg['spacing'])
+        spacing[2] = spacing_z
+        grid_cfg['spacing'] = spacing
+        model_cfg['grid'] = grid_cfg
+        rows.append(run_case(parameter='grid_spacing_z', value=f'{spacing_z:.4f}', baseline=False, model_cfg=model_cfg))
+
+    for band_half_width in [8.0, 12.0, 16.0]:
+        model_cfg = dict(default_model_cfg)
+        band_cfg = dict(default_model_cfg['band'])
+        band_cfg['band_half_width'] = band_half_width
+        model_cfg['band'] = band_cfg
+        rows.append(run_case(parameter='band_half_width', value=f'{band_half_width:.2f}', baseline=False, model_cfg=model_cfg))
+
+    for eta in [6.0, 8.0, 10.0]:
+        model_cfg = dict(default_model_cfg)
+        band_cfg = dict(default_model_cfg['band'])
+        band_cfg['eta'] = eta
+        model_cfg['band'] = band_cfg
+        rows.append(run_case(parameter='eta', value=f'{eta:.2f}', baseline=False, model_cfg=model_cfg))
+
+    for tol in [0.02, 0.05, 0.10]:
+        controller_cfg = dict(default_controller_cfg)
+        controller_cfg['work_mismatch_relative_tol'] = tol
+        rows.append(
+            run_case(
+                parameter='work_mismatch_relative_tol',
+                value=f'{tol:.3f}',
+                baseline=False,
+                controller_cfg=controller_cfg,
+            )
+        )
+
+    for continuity_enabled in [False, True]:
+        rows.append(
+            run_case(
+                parameter='continuity_enabled',
+                value=str(continuity_enabled),
+                baseline=False,
+                continuity_enabled=continuity_enabled,
+                boundary_only=continuity_enabled,
+            )
+        )
+
+    for consistent_traction in [False, True]:
+        rows.append(
+            run_case(
+                parameter='consistent_traction_reconstruction',
+                value=str(consistent_traction),
+                baseline=False,
+                consistent_traction=consistent_traction,
+            )
+        )
+
+    sensitivity_df = pd.DataFrame(rows)
+    sensitivity_tex_df = sensitivity_df.copy()
+    sensitivity_tex_df['Parameter'] = sensitivity_tex_df['Parameter'].str.replace('_', r'\_', regex=False)
+    csv_path = write_csv(sensitivity_df, tables_dir / 'sensitivity.csv')
+    md_path = write_markdown_table(sensitivity_df, tables_dir / 'sensitivity.md', title='Sensitivity analysis')
+    tex_path = write_latex_table(sensitivity_tex_df, tables_dir / 'sensitivity.tex', caption='敏感性分析', label='tab:sensitivity')
+    return {
+        'sensitivity_csv': csv_path,
+        'sensitivity_md': md_path,
+        'sensitivity_tex': tex_path,
+    }
+
+
 def _history_map_for_analytic_flat(config: dict[str, Any]) -> tuple[np.ndarray, np.ndarray, dict[str, DynamicHistory]]:
     cfg = config['benchmarks']['analytic_flat']
     setup = FlatImpactSetup(
@@ -329,10 +455,9 @@ def _history_map_for_native_band(config: dict[str, Any]) -> tuple[np.ndarray, np
     histories = {}
     model_cfg = cfg['model']
     baseline_model = _native_model_from_cfg(model_cfg, consistent_traction=False)
-    best_model = _native_model_from_cfg(model_cfg, consistent_traction=True)
     histories['event_aware_midpoint'] = run_flat_impact_benchmark(setup, dt=dt, scheme='event_aware_midpoint', model=baseline_model, controller=controller)
+    histories['event_aware_midpoint_impulse_corrected'] = run_flat_impact_benchmark(setup, dt=dt, scheme='event_aware_midpoint_impulse_corrected', model=baseline_model, controller=controller)
     histories['event_aware_midpoint_work_consistent'] = run_flat_impact_benchmark(setup, dt=dt, scheme='event_aware_midpoint_work_consistent', model=baseline_model, controller=controller)
-    histories['event_aware_midpoint_work_consistent_consistent_traction'] = run_flat_impact_benchmark(setup, dt=dt, scheme='event_aware_midpoint_work_consistent', model=best_model, controller=controller)
     tref = np.linspace(0.0, setup.t_final, 600)
     fref = np.array([exact_flat_impact_state(setup, t)[2] for t in tref], dtype=float)
     return tref, fref, histories
@@ -355,9 +480,9 @@ def generate_plot_outputs(config: dict[str, Any], *, output_root: str | Path | N
     paths['native_force'] = plot_force_histories(t_native, f_native, h_native, figs_dir / 'native_band_force_time.pdf', title='Native-band flat impact: force-time')
     native_named = {
         'baseline': h_native['event_aware_midpoint'],
+        'impulse correction': h_native['event_aware_midpoint_impulse_corrected'],
         'work-consistent': h_native['event_aware_midpoint_work_consistent'],
-        'consistent traction': h_native['event_aware_midpoint_work_consistent_consistent_traction'],
     }
     paths['active_measure'] = plot_active_measure_histories(native_named, figs_dir / 'native_band_active_measure_time.pdf', title='Native-band active measure evolution')
-    paths['controller_stats'] = plot_controller_statistics(h_native['event_aware_midpoint_work_consistent_consistent_traction'], figs_dir / 'native_band_controller_statistics.pdf', title='Native-band controller statistics')
+    paths['controller_stats'] = plot_controller_statistics(h_native['event_aware_midpoint_work_consistent'], figs_dir / 'native_band_controller_statistics.pdf', title='Native-band controller statistics')
     return paths
