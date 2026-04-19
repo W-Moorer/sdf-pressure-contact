@@ -105,3 +105,78 @@ def load_obj_triangle_mesh(path: str | Path) -> TriangleMesh:
         vertices=np.asarray(vertices, dtype=float),
         faces=np.asarray(faces, dtype=int),
     )
+
+
+def build_uv_sphere_triangle_mesh(
+    *,
+    radius: float,
+    segments: int,
+    stacks: int,
+) -> TriangleMesh:
+    """Build a small deterministic UV-sphere triangle mesh in the local frame.
+
+    This helper is intended for validation and sensitivity studies where a tiny,
+    reproducible sphere-like mesh is preferable to committing multiple static
+    OBJ assets. Face orientation is adjusted so outward normals are consistent.
+    """
+
+    if radius <= 0.0:
+        raise ValueError("radius must be positive")
+    if segments < 3:
+        raise ValueError("segments must be at least 3")
+    if stacks < 3:
+        raise ValueError("stacks must be at least 3")
+
+    vertices: list[list[float]] = [[0.0, 0.0, radius]]
+    for i in range(1, stacks):
+        theta = np.pi * i / stacks
+        z = radius * float(np.cos(theta))
+        rxy = radius * float(np.sin(theta))
+        for j in range(segments):
+            phi = 2.0 * np.pi * j / segments
+            vertices.append([rxy * float(np.cos(phi)), rxy * float(np.sin(phi)), z])
+    vertices.append([0.0, 0.0, -radius])
+
+    top = 0
+    bottom = len(vertices) - 1
+
+    def ring_start(i: int) -> int:
+        return 1 + (i - 1) * segments
+
+    faces: list[list[int]] = []
+    for j in range(segments):
+        a = ring_start(1) + j
+        b = ring_start(1) + (j + 1) % segments
+        faces.append([top, a, b])
+    for i in range(1, stacks - 1):
+        rs = ring_start(i)
+        ns = ring_start(i + 1)
+        for j in range(segments):
+            a = rs + j
+            b = rs + (j + 1) % segments
+            c = ns + j
+            d = ns + (j + 1) % segments
+            faces.append([a, c, d])
+            faces.append([a, d, b])
+    last = ring_start(stacks - 1)
+    for j in range(segments):
+        a = last + j
+        b = last + (j + 1) % segments
+        faces.append([a, b, bottom])
+
+    vertices_arr = np.asarray(vertices, dtype=float)
+    faces_arr = np.asarray(faces, dtype=int)
+    oriented_faces: list[list[int]] = []
+    for face in faces_arr:
+        p0, p1, p2 = vertices_arr[face]
+        normal = np.cross(p1 - p0, p2 - p0)
+        centroid = (p0 + p1 + p2) / 3.0
+        if float(np.dot(normal, centroid)) < 0.0:
+            oriented_faces.append([int(face[0]), int(face[2]), int(face[1])])
+        else:
+            oriented_faces.append([int(face[0]), int(face[1]), int(face[2])])
+
+    return TriangleMesh(
+        vertices=vertices_arr,
+        faces=np.asarray(oriented_faces, dtype=int),
+    )

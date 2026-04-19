@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Callable
 
 import numpy as np
@@ -12,6 +13,9 @@ from pfcsdf.contact.native_band import (
     sample_linear_pfc_balance_fields,
 )
 from pfcsdf.geometry.base import SignedDistanceGeometry
+from pfcsdf.geometry.mesh_factory import MeshAssetGeometryBuildResult, build_mesh_asset_sdf_geometry
+from pfcsdf.geometry.mesh_io import build_uv_sphere_triangle_mesh
+from pfcsdf.geometry.mesh_sdf import build_mesh_grid_sdf
 from pfcsdf.geometry.primitives import BoxFootprint, PlaneSDF, SphereSDF
 from pfcsdf.geometry.transforms import TransformedGeometry
 from pfcsdf.geometry.volume import UniformGrid3D
@@ -287,6 +291,67 @@ class MeshNativeBandSphereContactModel(NativeBandSphereContactModel):
         )
         plane = PlaneSDF(point=np.array([0.0, 0.0, 0.0]), normal=np.array([0.0, 0.0, 1.0]))
         return sphere, plane
+
+
+@dataclass(frozen=True)
+class MeshSphereDynamicValidationResult:
+    """Short-horizon analytic-vs-mesh sphere impact comparison on a shared benchmark setup."""
+
+    analytic_history: DynamicHistory
+    mesh_history: DynamicHistory
+    analytic_error: DynamicErrorSummary
+    mesh_error: DynamicErrorSummary
+    peak_force_relative_difference: float
+    impulse_relative_difference: float
+    max_penetration_relative_difference: float
+    onset_time_difference: float
+
+
+@dataclass(frozen=True)
+class MeshSphereDynamicFactoryValidationResult:
+    """Dynamic mesh-backed sphere validation built through the mesh asset factory."""
+
+    mesh_geometry: MeshAssetGeometryBuildResult
+    comparison: MeshSphereDynamicValidationResult
+    dt: float
+    scheme: str
+
+
+@dataclass(frozen=True)
+class MeshSphereSensitivityCase:
+    """One factor-setting in a controlled mesh-backed sphere sensitivity study."""
+
+    axis: str
+    label: str
+    mesh_segments: int
+    mesh_stacks: int
+    mesh_sdf_spacing: float
+    native_band_spacing: tuple[float, float, float]
+    native_band_shape: tuple[int, int, int]
+    analytic_static_force: float
+    mesh_static_force: float
+    static_force_relative_difference: float
+    analytic_peak_force: float | None = None
+    mesh_peak_force: float | None = None
+    peak_force_relative_difference: float | None = None
+    analytic_impulse: float | None = None
+    mesh_impulse: float | None = None
+    impulse_relative_difference: float | None = None
+    max_penetration_relative_difference: float | None = None
+    onset_time_difference: float | None = None
+
+
+@dataclass(frozen=True)
+class MeshSphereSensitivityStudy:
+    """Small one-factor-at-a-time diagnostics for the mesh-backed sphere path."""
+
+    static_overlap: float
+    axes_scanned: tuple[str, ...]
+    cases: tuple[MeshSphereSensitivityCase, ...]
+
+    def axis_cases(self, axis: str) -> tuple[MeshSphereSensitivityCase, ...]:
+        return tuple(case for case in self.cases if case.axis == axis)
+
 
 @dataclass(frozen=True)
 class DynamicHistory:
@@ -646,6 +711,392 @@ def benchmark_history_error_against_reference(reference: DynamicHistory, history
 def benchmark_sphere_impact_error(setup: SphereImpactSetup, history: DynamicHistory, *, dt_ref: float = 5e-4) -> DynamicErrorSummary:
     reference = sphere_reference_history(setup, dt_ref=dt_ref)
     return benchmark_history_error_against_reference(reference, history, onset_time_reference=setup.onset_time_exact)
+
+
+def _as_vector3(value: float | np.ndarray, *, name: str) -> np.ndarray:
+    arr = np.asarray(value, dtype=float)
+    if arr.ndim == 0:
+        arr = np.full(3, float(arr), dtype=float)
+    if arr.shape != (3,):
+        raise ValueError(f"{name} must be a scalar or have shape (3,)")
+    return arr
+
+
+def _build_matching_native_band_grid(
+    *,
+    cell_center_minimum: np.ndarray,
+    cell_center_maximum: np.ndarray,
+    spacing: float | np.ndarray,
+) -> UniformGrid3D:
+    spacing_vec = _as_vector3(spacing, name="spacing")
+    if np.any(spacing_vec <= 0.0):
+        raise ValueError("spacing must be strictly positive")
+    center_span = np.asarray(cell_center_maximum, dtype=float) - np.asarray(cell_center_minimum, dtype=float)
+    shape = tuple(int(max(2, np.ceil(center_span[axis] / spacing_vec[axis] - 1e-12) + 1)) for axis in range(3))
+    origin = np.asarray(cell_center_minimum, dtype=float) - 0.5 * spacing_vec
+    return UniformGrid3D(origin=origin, spacing=spacing_vec, shape=shape)
+
+
+def _build_mesh_backed_sphere_local_geometry(
+    *,
+    radius: float,
+    mesh_segments: int,
+    mesh_stacks: int,
+    mesh_sdf_spacing: float,
+    mesh_padding: float | np.ndarray,
+) -> SignedDistanceGeometry:
+    mesh = build_uv_sphere_triangle_mesh(
+        radius=radius,
+        segments=mesh_segments,
+        stacks=mesh_stacks,
+    )
+    return build_mesh_grid_sdf(
+        mesh,
+        spacing=mesh_sdf_spacing,
+        padding=mesh_padding,
+    ).geometry
+
+
+def _build_mesh_sphere_sensitivity_case(
+    setup: SphereImpactSetup,
+    *,
+    dt: float,
+    scheme: str,
+    config: NativeBandAccumulatorConfig,
+    grid: UniformGrid3D,
+    sphere_geometry_local: SignedDistanceGeometry,
+    mesh_segments: int,
+    mesh_stacks: int,
+    mesh_sdf_spacing: float,
+    static_overlap: float,
+    axis: str,
+    label: str,
+    max_depth_a: float,
+    max_depth_b: float,
+    dt_ref: float,
+    include_dynamic_metrics: bool,
+) -> MeshSphereSensitivityCase:
+    analytic_model = NativeBandSphereContactModel(
+        setup,
+        grid,
+        config,
+        max_depth_a=max_depth_a,
+        max_depth_b=max_depth_b,
+    )
+    mesh_model = MeshNativeBandSphereContactModel(
+        setup,
+        grid,
+        config,
+        sphere_geometry_local=sphere_geometry_local,
+        max_depth_a=max_depth_a,
+        max_depth_b=max_depth_b,
+    )
+    analytic_static_force = analytic_model.evaluate(-static_overlap).force
+    mesh_static_force = mesh_model.evaluate(-static_overlap).force
+    static_force_relative_difference = relative_error(mesh_static_force, analytic_static_force)
+
+    if not include_dynamic_metrics:
+        return MeshSphereSensitivityCase(
+            axis=axis,
+            label=label,
+            mesh_segments=mesh_segments,
+            mesh_stacks=mesh_stacks,
+            mesh_sdf_spacing=float(mesh_sdf_spacing),
+            native_band_spacing=tuple(float(v) for v in grid.spacing),
+            native_band_shape=grid.shape,
+            analytic_static_force=analytic_static_force,
+            mesh_static_force=mesh_static_force,
+            static_force_relative_difference=static_force_relative_difference,
+        )
+
+    comparison = validate_mesh_native_band_sphere_dynamic_against_analytic(
+        setup,
+        dt=dt,
+        scheme=scheme,
+        analytic_model=analytic_model,
+        mesh_model=mesh_model,
+        dt_ref=dt_ref,
+    )
+    return MeshSphereSensitivityCase(
+        axis=axis,
+        label=label,
+        mesh_segments=mesh_segments,
+        mesh_stacks=mesh_stacks,
+        mesh_sdf_spacing=float(mesh_sdf_spacing),
+        native_band_spacing=tuple(float(v) for v in grid.spacing),
+        native_band_shape=grid.shape,
+        analytic_static_force=analytic_static_force,
+        mesh_static_force=mesh_static_force,
+        static_force_relative_difference=static_force_relative_difference,
+        analytic_peak_force=float(np.max(comparison.analytic_history.forces)),
+        mesh_peak_force=float(np.max(comparison.mesh_history.forces)),
+        peak_force_relative_difference=comparison.peak_force_relative_difference,
+        analytic_impulse=comparison.analytic_history.impulse,
+        mesh_impulse=comparison.mesh_history.impulse,
+        impulse_relative_difference=comparison.impulse_relative_difference,
+        max_penetration_relative_difference=comparison.max_penetration_relative_difference,
+        onset_time_difference=comparison.onset_time_difference,
+    )
+
+
+def validate_mesh_native_band_sphere_dynamic_against_analytic(
+    setup: SphereImpactSetup,
+    *,
+    dt: float,
+    scheme: str,
+    analytic_model: NativeBandSphereContactModel,
+    mesh_model: MeshNativeBandSphereContactModel,
+    controller: EventAwareControllerConfig | None = None,
+    dt_ref: float = 5e-4,
+) -> MeshSphereDynamicValidationResult:
+    """Run a short controlled sphere-impact comparison with only the sphere geometry source changed."""
+
+    analytic_history = run_sphere_impact_benchmark(
+        setup,
+        dt=dt,
+        scheme=scheme,
+        model=analytic_model,
+        controller=controller,
+    )
+    mesh_history = run_sphere_impact_benchmark(
+        setup,
+        dt=dt,
+        scheme=scheme,
+        model=mesh_model,
+        controller=controller,
+    )
+    analytic_error = benchmark_sphere_impact_error(setup, analytic_history, dt_ref=dt_ref)
+    mesh_error = benchmark_sphere_impact_error(setup, mesh_history, dt_ref=dt_ref)
+
+    analytic_onset = analytic_history.onset_time if analytic_history.onset_time is not None else setup.t_final
+    mesh_onset = mesh_history.onset_time if mesh_history.onset_time is not None else setup.t_final
+    return MeshSphereDynamicValidationResult(
+        analytic_history=analytic_history,
+        mesh_history=mesh_history,
+        analytic_error=analytic_error,
+        mesh_error=mesh_error,
+        peak_force_relative_difference=relative_error(
+            float(np.max(mesh_history.forces)),
+            float(np.max(analytic_history.forces)),
+        ),
+        impulse_relative_difference=relative_error(
+            mesh_history.impulse,
+            analytic_history.impulse,
+        ),
+        max_penetration_relative_difference=relative_error(
+            float(-np.min(mesh_history.gaps)),
+            float(-np.min(analytic_history.gaps)),
+        ),
+        onset_time_difference=timing_error(mesh_onset, analytic_onset),
+    )
+
+
+def validate_mesh_native_band_sphere_dynamic_from_asset(
+    asset_path: str | Path,
+    setup: SphereImpactSetup,
+    *,
+    grid: UniformGrid3D,
+    config: NativeBandAccumulatorConfig,
+    dt: float,
+    scheme: str,
+    padding: float | np.ndarray = 0.12,
+    mesh_sdf_spacing: float | np.ndarray | None = None,
+    recommended_spacing_scale: float = 0.9,
+    max_depth_a: float = 2.0,
+    max_depth_b: float = 2.0,
+    controller: EventAwareControllerConfig | None = None,
+    dt_ref: float = 5e-4,
+) -> MeshSphereDynamicFactoryValidationResult:
+    """Build a mesh-backed sphere through the asset factory and run a dynamic comparison.
+
+    When ``mesh_sdf_spacing`` is omitted, the mesh factory uses the current
+    recommended sphere-validation policy tied to ``grid.spacing``.
+    """
+
+    mesh_geometry = build_mesh_asset_sdf_geometry(
+        asset_path,
+        spacing=mesh_sdf_spacing,
+        native_band_spacing=grid.spacing,
+        recommended_spacing_scale=recommended_spacing_scale,
+        padding=padding,
+    )
+    analytic_model = NativeBandSphereContactModel(
+        setup,
+        grid,
+        config,
+        max_depth_a=max_depth_a,
+        max_depth_b=max_depth_b,
+    )
+    mesh_model = MeshNativeBandSphereContactModel(
+        setup,
+        grid,
+        config,
+        sphere_geometry_local=mesh_geometry.local_geometry,
+        max_depth_a=max_depth_a,
+        max_depth_b=max_depth_b,
+    )
+    comparison = validate_mesh_native_band_sphere_dynamic_against_analytic(
+        setup,
+        dt=dt,
+        scheme=scheme,
+        analytic_model=analytic_model,
+        mesh_model=mesh_model,
+        controller=controller,
+        dt_ref=dt_ref,
+    )
+    return MeshSphereDynamicFactoryValidationResult(
+        mesh_geometry=mesh_geometry,
+        comparison=comparison,
+        dt=float(dt),
+        scheme=scheme,
+    )
+
+
+def run_mesh_backed_sphere_sensitivity_study(
+    setup: SphereImpactSetup,
+    *,
+    dt: float,
+    scheme: str,
+    config: NativeBandAccumulatorConfig,
+    static_overlap: float = 0.14,
+    mesh_sdf_spacing_levels: tuple[float, ...] = (0.16, 0.12, 0.08),
+    mesh_resolution_levels: tuple[tuple[int, int], ...] = ((12, 6), (16, 8), (20, 10)),
+    native_band_spacing_levels: tuple[tuple[float, float, float], ...] = (
+        (0.1, 0.1, 0.05),
+        (0.09, 0.09, 0.04),
+        (0.08, 0.08, 0.04),
+    ),
+    baseline_mesh_segments: int = 12,
+    baseline_mesh_stacks: int = 6,
+    baseline_mesh_sdf_spacing: float = 0.12,
+    baseline_native_band_origin: np.ndarray = np.array([-1.1, -1.1, -0.14]),
+    baseline_native_band_spacing: np.ndarray = np.array([0.1, 0.1, 0.05]),
+    baseline_native_band_shape: tuple[int, int, int] = (23, 23, 24),
+    mesh_padding: float | np.ndarray = 0.12,
+    max_depth_a: float = 2.0,
+    max_depth_b: float = 2.0,
+    dt_ref: float = 2e-3,
+    dynamic_axes: tuple[str, ...] = ("mesh_sdf_spacing",),
+) -> MeshSphereSensitivityStudy:
+    """Run a compact one-factor-at-a-time sensitivity study for the mesh-backed sphere path.
+
+    The current implementation keeps the short dynamic comparison on the
+    grid-SDF-spacing axis by default, then uses static force comparisons to
+    isolate mesh-resolution and native-band-grid effects at much lower cost.
+    """
+
+    baseline_origin = np.asarray(baseline_native_band_origin, dtype=float)
+    baseline_spacing = _as_vector3(baseline_native_band_spacing, name="baseline_native_band_spacing")
+    baseline_grid = UniformGrid3D(
+        origin=baseline_origin,
+        spacing=baseline_spacing,
+        shape=baseline_native_band_shape,
+    )
+    baseline_cell_center_minimum = baseline_grid.cell_center_origin
+    baseline_cell_center_maximum = baseline_grid.cell_center_origin + baseline_grid.spacing * (np.asarray(baseline_grid.shape) - 1.0)
+    mesh_padding_vec = _as_vector3(mesh_padding, name="mesh_padding")
+    cases: list[MeshSphereSensitivityCase] = []
+
+    geometry_cache: dict[tuple[int, int, float, tuple[float, float, float]], SignedDistanceGeometry] = {}
+
+    def get_geometry(mesh_segments: int, mesh_stacks: int, mesh_sdf_spacing: float) -> SignedDistanceGeometry:
+        key = (
+            int(mesh_segments),
+            int(mesh_stacks),
+            float(mesh_sdf_spacing),
+            tuple(float(v) for v in mesh_padding_vec),
+        )
+        geometry = geometry_cache.get(key)
+        if geometry is None:
+            geometry = _build_mesh_backed_sphere_local_geometry(
+                radius=setup.sphere_radius,
+                mesh_segments=mesh_segments,
+                mesh_stacks=mesh_stacks,
+                mesh_sdf_spacing=mesh_sdf_spacing,
+                mesh_padding=mesh_padding_vec,
+            )
+            geometry_cache[key] = geometry
+        return geometry
+
+    for mesh_sdf_spacing in mesh_sdf_spacing_levels:
+        cases.append(
+            _build_mesh_sphere_sensitivity_case(
+                setup,
+                dt=dt,
+                scheme=scheme,
+                config=config,
+                grid=baseline_grid,
+                sphere_geometry_local=get_geometry(baseline_mesh_segments, baseline_mesh_stacks, float(mesh_sdf_spacing)),
+                mesh_segments=baseline_mesh_segments,
+                mesh_stacks=baseline_mesh_stacks,
+                mesh_sdf_spacing=float(mesh_sdf_spacing),
+                static_overlap=static_overlap,
+                axis="mesh_sdf_spacing",
+                label=f"mesh_sdf_spacing={mesh_sdf_spacing:.3f}",
+                max_depth_a=max_depth_a,
+                max_depth_b=max_depth_b,
+                dt_ref=dt_ref,
+                include_dynamic_metrics="mesh_sdf_spacing" in dynamic_axes,
+            )
+        )
+
+    for mesh_segments, mesh_stacks in mesh_resolution_levels:
+        cases.append(
+            _build_mesh_sphere_sensitivity_case(
+                setup,
+                dt=dt,
+                scheme=scheme,
+                config=config,
+                grid=baseline_grid,
+                sphere_geometry_local=get_geometry(int(mesh_segments), int(mesh_stacks), baseline_mesh_sdf_spacing),
+                mesh_segments=int(mesh_segments),
+                mesh_stacks=int(mesh_stacks),
+                mesh_sdf_spacing=baseline_mesh_sdf_spacing,
+                static_overlap=static_overlap,
+                axis="mesh_resolution",
+                label=f"mesh_resolution={mesh_segments}x{mesh_stacks}",
+                max_depth_a=max_depth_a,
+                max_depth_b=max_depth_b,
+                dt_ref=dt_ref,
+                include_dynamic_metrics="mesh_resolution" in dynamic_axes,
+            )
+        )
+
+    for native_band_spacing in native_band_spacing_levels:
+        grid = _build_matching_native_band_grid(
+            cell_center_minimum=baseline_cell_center_minimum,
+            cell_center_maximum=baseline_cell_center_maximum,
+            spacing=np.asarray(native_band_spacing, dtype=float),
+        )
+        cases.append(
+            _build_mesh_sphere_sensitivity_case(
+                setup,
+                dt=dt,
+                scheme=scheme,
+                config=config,
+                grid=grid,
+                sphere_geometry_local=get_geometry(baseline_mesh_segments, baseline_mesh_stacks, baseline_mesh_sdf_spacing),
+                mesh_segments=baseline_mesh_segments,
+                mesh_stacks=baseline_mesh_stacks,
+                mesh_sdf_spacing=baseline_mesh_sdf_spacing,
+                static_overlap=static_overlap,
+                axis="native_band_spacing",
+                label=(
+                    "native_band_spacing="
+                    f"({native_band_spacing[0]:.3f},{native_band_spacing[1]:.3f},{native_band_spacing[2]:.3f})"
+                ),
+                max_depth_a=max_depth_a,
+                max_depth_b=max_depth_b,
+                dt_ref=dt_ref,
+                include_dynamic_metrics="native_band_spacing" in dynamic_axes,
+            )
+        )
+
+    return MeshSphereSensitivityStudy(
+        static_overlap=float(static_overlap),
+        axes_scanned=("mesh_sdf_spacing", "mesh_resolution", "native_band_spacing"),
+        cases=tuple(cases),
+    )
 
 
 def run_sphere_impact_benchmark(

@@ -12,7 +12,12 @@ from pfcsdf.dynamics.benchmarks import (
     NativeBandSphereContactModel,
     SphereImpactSetup,
 )
-from pfcsdf.geometry import GridSDFGeometry, TransformedGeometry, build_mesh_asset_sdf_geometry
+from pfcsdf.geometry import (
+    GridSDFGeometry,
+    TransformedGeometry,
+    build_mesh_asset_sdf_geometry,
+    recommend_mesh_sdf_spacing_from_native_band,
+)
 from pfcsdf.geometry.primitives import SphereSDF
 from pfcsdf.geometry.volume import UniformGrid3D
 
@@ -99,6 +104,11 @@ def sphere_mesh_result(sphere_asset_path: Path):
     )
 
 
+def test_mesh_asset_factory_recommends_mesh_sdf_spacing_from_native_band() -> None:
+    recommended = recommend_mesh_sdf_spacing_from_native_band(np.array([0.1, 0.1, 0.05]))
+    assert math.isclose(recommended, 0.09, abs_tol=1e-12)
+
+
 def test_mesh_asset_factory_builds_world_wrapped_geometry_from_obj(sphere_mesh_result) -> None:
     result = sphere_mesh_result
 
@@ -106,7 +116,22 @@ def test_mesh_asset_factory_builds_world_wrapped_geometry_from_obj(sphere_mesh_r
     assert isinstance(result.geometry, TransformedGeometry)
     assert result.validation.is_signed_distance_ready
     assert result.mesh.num_faces == 120
+    assert np.allclose(result.sdf_spacing, np.array([0.12, 0.12, 0.12]))
+    assert result.recommended_sdf_spacing is None
+    assert not result.used_recommended_spacing_policy
     assert math.isclose(result.geometry.signed_distance(np.array([0.0, 0.0, 1.2])), -0.85, abs_tol=0.12)
+
+
+def test_mesh_asset_factory_can_use_recommended_spacing_policy(sphere_asset_path: Path) -> None:
+    result = build_mesh_asset_sdf_geometry(
+        sphere_asset_path,
+        native_band_spacing=np.array([0.1, 0.1, 0.05]),
+        padding=0.12,
+    )
+
+    assert result.used_recommended_spacing_policy
+    assert math.isclose(result.recommended_sdf_spacing, 0.09, abs_tol=1e-12)
+    assert np.allclose(result.sdf_spacing, np.array([0.09, 0.09, 0.09]))
 
 
 def test_mesh_backed_sphere_static_force_is_close_to_analytic_native_band(sphere_mesh_result) -> None:
